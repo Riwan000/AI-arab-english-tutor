@@ -1,0 +1,30 @@
+{
+  "id": "prepositions",
+  "title": "Prepositions",
+  "description": "Prepositions show the relationship between words — where, when, or how.",
+  "examples": [
+    "I work at an office.",
+    "She lives in Dubai.",
+    "The meeting is on Monday."
+  ],
+  "grammar_rules": [
+    "Use 'in' for cities and countries",
+    "Use 'at' for specific places",
+    "Use 'on' for days and surfaces"
+  ],
+  "allowed_vocabulary": [
+    "in", "at", "on", "to", "from", "with", "Dubai", "office", "home", "Monday", "morning"
+  ],
+  "negative_form": [
+    "I don't work on Sunday.",
+    "She is not at home."
+  ],
+  "question_form": [
+    "Where do you work?",
+    "Do you live in Dubai?"
+  ],
+  "tips": [
+    "in + city/country, at + place, on + day.",
+    "Practice with your own daily routine."
+  ]
+}

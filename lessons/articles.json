@@ -1,0 +1,30 @@
+{
+  "id": "articles",
+  "title": "Articles (a / an / the)",
+  "description": "We use articles before nouns. 'A' and 'an' are for general things. 'The' is for specific things.",
+  "examples": [
+    "I have a car.",
+    "She is an engineer.",
+    "The office is near my home."
+  ],
+  "grammar_rules": [
+    "Use 'a' before consonant sounds",
+    "Use 'an' before vowel sounds",
+    "Use 'the' for specific nouns both speaker and listener know"
+  ],
+  "allowed_vocabulary": [
+    "a", "an", "the", "car", "office", "engineer", "home", "book", "apple", "hour"
+  ],
+  "negative_form": [
+    "I don't have a car.",
+    "She is not an engineer."
+  ],
+  "question_form": [
+    "Do you have a car?",
+    "Is she an engineer?"
+  ],
+  "tips": [
+    "Use 'an' before vowel sounds, not just vowel letters (an hour).",
+    "Use 'the' when talking about something specific."
+  ]
+}

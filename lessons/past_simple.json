@@ -1,0 +1,31 @@
+{
+  "id": "past_simple",
+  "title": "Past Simple",
+  "description": "We use Past Simple for completed actions in the past.",
+  "examples": [
+    "I ate breakfast at 7 AM.",
+    "She worked in Dubai last year.",
+    "They went to the market yesterday."
+  ],
+  "grammar_rules": [
+    "Use past tense verb form",
+    "Regular verbs: add -ed",
+    "Irregular verbs have special forms",
+    "Use did for questions, didn't for negatives"
+  ],
+  "allowed_vocabulary": [
+    "ate", "worked", "went", "studied", "yesterday", "last week", "last year", "ago"
+  ],
+  "negative_form": [
+    "I didn't go to work yesterday.",
+    "She didn't eat breakfast."
+  ],
+  "question_form": [
+    "Did you go to work?",
+    "Did she study English?"
+  ],
+  "tips": [
+    "Time words like 'yesterday' and 'last week' signal Past Simple.",
+    "Watch out for irregular verbs like go → went, eat → ate."
+  ]
+}

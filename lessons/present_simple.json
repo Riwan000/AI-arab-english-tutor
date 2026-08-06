@@ -1,0 +1,31 @@
+{
+  "id": "present_simple",
+  "title": "Present Simple",
+  "description": "We use Present Simple for routines, habits, and facts.",
+  "examples": [
+    "I eat breakfast every morning.",
+    "She works in Dubai.",
+    "They live in Riyadh."
+  ],
+  "grammar_rules": [
+    "Use base verb form for I/you/we/they",
+    "Add -s or -es for he/she/it",
+    "Use do/does for questions",
+    "Use don't/doesn't for negatives"
+  ],
+  "allowed_vocabulary": [
+    "eat", "work", "live", "go", "study", "wake up", "breakfast", "office", "home", "every day", "usually", "always"
+  ],
+  "negative_form": [
+    "I don't drink coffee.",
+    "She doesn't work on Friday."
+  ],
+  "question_form": [
+    "Do you work?",
+    "Does she live in Dubai?"
+  ],
+  "tips": [
+    "Remember: he/she/it needs -s on the verb.",
+    "Use 'every day', 'usually', or 'always' to show routines."
+  ]
+}

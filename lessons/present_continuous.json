@@ -1,0 +1,30 @@
+{
+  "id": "present_continuous",
+  "title": "Present Continuous",
+  "description": "We use Present Continuous for actions happening right now or temporary situations.",
+  "examples": [
+    "I am eating breakfast now.",
+    "She is working at the office today.",
+    "They are studying English."
+  ],
+  "grammar_rules": [
+    "Use am/is/are + verb-ing",
+    "Use for actions happening now",
+    "Use for temporary situations"
+  ],
+  "allowed_vocabulary": [
+    "eating", "working", "studying", "reading", "now", "today", "at the moment", "right now"
+  ],
+  "negative_form": [
+    "I am not sleeping.",
+    "He is not working today."
+  ],
+  "question_form": [
+    "Are you studying?",
+    "Is she working now?"
+  ],
+  "tips": [
+    "Look for time words like 'now' or 'today'.",
+    "Don't forget the -ing ending on the verb."
+  ]
+}
