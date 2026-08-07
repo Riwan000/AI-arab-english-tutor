@@ -6,6 +6,7 @@ from collections import Counter
 def calculate_session_summary(
     messages: list[dict],
     mistakes: list,
+    lesson_title: str | None = None,
 ) -> dict:
     user_messages = [m for m in messages if m["role"] == "user"]
     exchanges = len(user_messages)
@@ -20,10 +21,10 @@ def calculate_session_summary(
 
     vocabulary = _extract_vocabulary(user_messages)
 
-    lesson_title = "this lesson"
+    title = lesson_title or "this lesson"
     recommendation = None
     if grammar_score < 70:
-        recommendation = f"Practice {lesson_title} again tomorrow."
+        recommendation = f"Practice {title} again tomorrow."
     elif grammar_score >= 90:
         recommendation = "Excellent work! Try a harder lesson next."
 

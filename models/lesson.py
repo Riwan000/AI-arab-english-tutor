@@ -1,15 +1,28 @@
-"""Lesson data model."""
+"""Lesson data models."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
-class Lesson(BaseModel):
+class LessonSummary(BaseModel):
+    """Subset returned by GET /api/v1/lessons."""
+
     id: str
     title: str
     description: str
-    examples: list[str] = []
-    grammar_rules: list[str] = []
-    allowed_vocabulary: list[str] = []
-    negative_form: list[str] = []
-    question_form: list[str] = []
-    tips: list[str] = []
+
+
+class Lesson(BaseModel):
+    """Full lesson detail for GET /api/v1/lessons/{lesson_id}."""
+
+    id: str
+    title: str
+    description: str
+    examples: list[str] = Field(default_factory=list)
+    grammar_rules: list[str] = Field(default_factory=list)
+    allowed_vocabulary: list[str] = Field(default_factory=list)
+    negative_form: list[str] = Field(default_factory=list)
+    question_form: list[str] = Field(default_factory=list)
+    tips: list[str] = Field(default_factory=list)
+
+    def to_summary(self) -> LessonSummary:
+        return LessonSummary(id=self.id, title=self.title, description=self.description)

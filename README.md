@@ -16,4 +16,7 @@ streamlit run app.py
 
 - [prd.md](prd.md) — product requirements
 - [tech-stack.md](tech-stack.md) — technical architecture
+- [hld.md](hld.md) — high-level design
 - [directory.md](directory.md) — project structure
+- [db.md](db.md) — database design
+- [backend.md](backend.md) — backend architecture & API plan

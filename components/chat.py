@@ -1,5 +1,7 @@
 """Main chat interface for guided AI conversation."""
 
+from datetime import datetime, timezone
+
 import streamlit as st
 
 from components.correction_card import render_correction_card
@@ -29,28 +31,50 @@ def render_chat() -> None:
         _handle_user_message(prompt, lesson)
 
 
+def _message_metadata(lesson: dict) -> dict:
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "lesson_id": lesson["id"],
+    }
+
+
 def _start_conversation(lesson: dict) -> None:
     messages = build_messages(lesson, st.session_state.messages, start=True)
     response = chat_completion(messages)
-    assistant_message = {"role": "assistant", "content": response}
+    assistant_message = {
+        "role": "assistant",
+        "content": response,
+        "has_correction": False,
+        **_message_metadata(lesson),
+    }
     st.session_state.messages.append(assistant_message)
     st.rerun()
 
 
 def _handle_user_message(user_text: str, lesson: dict) -> None:
-    st.session_state.messages.append({"role": "user", "content": user_text})
+    st.session_state.messages.append({
+        "role": "user",
+        "content": user_text,
+        **_message_metadata(lesson),
+    })
+    user_message_index = len(st.session_state.messages) - 1
 
     messages = build_messages(lesson, st.session_state.messages)
     response = chat_completion(messages)
     feedback = extract_feedback(response)
 
     if feedback:
-        st.session_state.mistakes.extend(feedback)
+        for item in feedback:
+            entry = item.model_dump() if hasattr(item, "model_dump") else dict(item)
+            entry["message_index"] = user_message_index
+            st.session_state.mistakes.append(entry)
 
     assistant_message = {
         "role": "assistant",
         "content": response,
         "feedback": feedback,
+        "has_correction": bool(feedback),
+        **_message_metadata(lesson),
     }
     st.session_state.messages.append(assistant_message)
     st.rerun()

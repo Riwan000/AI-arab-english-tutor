@@ -6,6 +6,7 @@ from components.chat import render_chat
 from components.lesson_view import render_lesson_view
 from components.sidebar import render_sidebar
 from components.summary import render_summary
+from services.database import purge_old_conversations
 
 
 def init_session_state() -> None:
@@ -17,6 +18,8 @@ def init_session_state() -> None:
         "score": {},
         "conversation_started": False,
         "session_ended": False,
+        "session_persisted": False,
+        "saved_conversation_id": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -31,6 +34,11 @@ def main() -> None:
     )
 
     init_session_state()
+
+    if "retention_purged" not in st.session_state:
+        purge_old_conversations()
+        st.session_state.retention_purged = True
+
     render_sidebar()
 
     if st.session_state.session_ended:
