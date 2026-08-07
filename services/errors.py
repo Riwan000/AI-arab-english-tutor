@@ -16,6 +16,16 @@ class LessonNotFoundError(AppError):
     detail = "Lesson not found"
 
 
+class SessionNotFoundError(AppError):
+    status_code = 404
+    detail = "Session not found"
+
+
+class EmptySessionError(AppError):
+    status_code = 400
+    detail = "No messages to save"
+
+
 class LLMError(AppError):
     status_code = 502
     detail = "The AI tutor is temporarily unavailable. Please try again."

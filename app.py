@@ -6,7 +6,6 @@ from components.chat import render_chat
 from components.lesson_view import render_lesson_view
 from components.sidebar import render_sidebar
 from components.summary import render_summary
-from services.database import purge_old_conversations
 
 
 def init_session_state() -> None:
@@ -34,10 +33,6 @@ def main() -> None:
     )
 
     init_session_state()
-
-    if "retention_purged" not in st.session_state:
-        purge_old_conversations()
-        st.session_state.retention_purged = True
 
     render_sidebar()
 
