@@ -1,0 +1,5 @@
+# User message sent when starting a new guided conversation.
+# Placeholder: {title}
+
+user_message: |
+  Start a guided conversation to practice {title}. Greet the student and ask your first simple question.

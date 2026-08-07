@@ -165,6 +165,14 @@ The LLM is responsible for:
 
 # 6. Prompt Builder
 
+Prompt text lives in **YAML files** under `prompts/` so tutors and developers can edit behavior without changing Python. `prompt_loader.py` reads the YAML; `prompt_builder.py` injects lesson data and history before each API call.
+
+| File | Purpose |
+|------|---------|
+| `system_prompt.yaml` | Base tutor instructions and JSON correction format |
+| `lesson_context.yaml` | Lesson rules, vocabulary, level, and language |
+| `start_conversation.yaml` | Opening user message when a session starts |
+
 A dedicated Python module constructs the system prompt before every conversation.
 
 The prompt includes:
@@ -343,7 +351,10 @@ english-ai-tutor/
 │   └── summary.py
 │
 ├── prompts/
-│   ├── system_prompt.py
+│   ├── system_prompt.yaml
+│   ├── lesson_context.yaml
+│   ├── start_conversation.yaml
+│   ├── prompt_loader.py
 │   └── prompt_builder.py
 │
 ├── services/

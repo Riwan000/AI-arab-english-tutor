@@ -78,7 +78,7 @@ The system has four logical layers:
 │  Session orchestration (app.py) · Scoring · Grammar parsing │
 ├─────────────────────────────────────────────────────────────┤
 │ LAYER 3 — AI / PROMPT ENGINE                                │
-│  system_prompt · prompt_builder · openrouter client         │
+│  *.yaml prompts · prompt_loader · prompt_builder · openrouter │
 ├─────────────────────────────────────────────────────────────┤
 │ LAYER 4 — DATA                                              │
 │  lessons/*.json · session state · SQLite (optional)         │
@@ -209,6 +209,8 @@ One OpenRouter request per user message returns:
 ```
 
 ## 8.2 Prompt inputs (every request)
+
+Base and lesson templates live in `prompts/*.yaml`; `prompt_builder.py` fills placeholders at runtime.
 
 | Input | Source |
 |-------|--------|

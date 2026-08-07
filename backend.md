@@ -192,7 +192,10 @@ AI-arab-english-tutor/
 │   └── session_repo.py             # CRUD for conversations/messages/feedback
 │
 ├── prompts/
-│   ├── system_prompt.py
+│   ├── system_prompt.yaml
+│   ├── lesson_context.yaml
+│   ├── start_conversation.yaml
+│   ├── prompt_loader.py
 │   └── prompt_builder.py
 │
 ├── models/                         # Domain models (shared)

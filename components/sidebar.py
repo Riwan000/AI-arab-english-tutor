@@ -1,22 +1,11 @@
 """Sidebar: lesson selector, score, mistakes, vocabulary, end session."""
 
-import json
 from datetime import datetime
-from pathlib import Path
 
 import streamlit as st
 
-from services.database import get_session_summary, list_past_sessions
-
-LESSONS_DIR = Path(__file__).parent.parent / "lessons"
-
-
-def load_lessons() -> list[dict]:
-    lessons = []
-    for path in sorted(LESSONS_DIR.glob("*.json")):
-        with open(path, encoding="utf-8") as f:
-            lessons.append(json.load(f))
-    return lessons
+from repositories.session_repo import SessionRepository
+from services.lessons import get_lesson, list_lessons
 
 
 def _format_date(iso_timestamp: str) -> str:
@@ -28,7 +17,8 @@ def _format_date(iso_timestamp: str) -> str:
 
 
 def render_past_sessions() -> None:
-    sessions = list_past_sessions(limit=10)
+    repo = SessionRepository()
+    sessions = repo.list_recent(limit=10)
     if not sessions:
         st.caption("No past sessions yet.")
         return
@@ -40,7 +30,7 @@ def render_past_sessions() -> None:
             f"{_format_date(session['ended_at'])}"
         )
         with st.expander(label):
-            detail = get_session_summary(session["id"])
+            detail = repo.get_summary(session["id"])
             if not detail:
                 continue
             st.write(f"**Exchanges:** {detail['exchange_count']}")
@@ -59,8 +49,8 @@ def render_sidebar() -> None:
     with st.sidebar:
         st.title("📚 English Tutor")
 
-        lessons = load_lessons()
-        lesson_titles = {lesson["title"]: lesson for lesson in lessons}
+        summaries = list_lessons()
+        lesson_titles = {summary.title: summary.id for summary in summaries}
 
         selected_title = st.selectbox(
             "Choose a lesson",
@@ -69,7 +59,8 @@ def render_sidebar() -> None:
         )
 
         if selected_title:
-            st.session_state.lesson = lesson_titles[selected_title]
+            lesson = get_lesson(lesson_titles[selected_title])
+            st.session_state.lesson = lesson.model_dump()
 
         st.divider()
         st.subheader("Progress")

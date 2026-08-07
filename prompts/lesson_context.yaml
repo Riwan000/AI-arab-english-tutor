@@ -1,0 +1,20 @@
+# Lesson-specific context appended to the system prompt.
+# Placeholders: {title}, {description}, {grammar_rules}, {vocabulary},
+#               {student_level}, {native_language}
+
+template: |
+  ## Current Lesson
+  Title: {title}
+  Description: {description}
+
+  ## Grammar Rules
+  {grammar_rules}
+
+  ## Allowed Vocabulary
+  {vocabulary}
+
+  ## Student Level
+  {student_level}
+
+  ## Native Language
+  {native_language}

@@ -2,8 +2,7 @@
 
 import streamlit as st
 
-from services.database import save_session
-from services.openrouter import DEFAULT_MODEL
+from services.conversation import end_session
 from services.scoring import calculate_session_summary
 
 
@@ -22,20 +21,20 @@ def persist_session() -> int | None:
         mistakes=st.session_state.mistakes,
         lesson_title=lesson.get("title"),
     )
+    st.session_state.score = summary
 
-    conversation_id = save_session(
-        lesson=lesson,
+    result = end_session(
+        lesson_id=lesson["id"],
         messages=messages,
         mistakes=st.session_state.mistakes,
-        summary=summary,
-        model_used=DEFAULT_MODEL,
     )
 
-    if conversation_id:
+    if result:
         st.session_state.session_persisted = True
-        st.session_state.saved_conversation_id = conversation_id
+        st.session_state.saved_conversation_id = result.id
+        return result.id
 
-    return conversation_id
+    return None
 
 
 def render_summary() -> None:

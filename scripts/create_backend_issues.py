@@ -255,13 +255,14 @@ Implement AI opening message flow.
 
 ## Flow
 1. Load lesson via `lessons.get_lesson()`
-2. `prompt_builder.build_messages(..., start=True)`
+2. `prompt_builder.build_messages(..., start=True)` (loads templates from `prompts/*.yaml`)
 3. `openrouter.chat_completion()`
 4. `grammar.extract_feedback()` + `strip_json_from_response()`
 5. Return `ChatResponse`
 
 ## Files
 - `services/conversation.py` (new)
+- `prompts/system_prompt.yaml`, `lesson_context.yaml`, `start_conversation.yaml`
 
 ## Depends on
 - #1.6, #1.4, #1.2, #1.8""",
@@ -276,7 +277,7 @@ Implement stateless message handling orchestration.
 ## Flow
 1. Validate lesson exists
 2. Append user message to history
-3. Build prompt → LLM → parse → strip
+3. Build prompt from `prompts/*.yaml` via `prompt_builder` → LLM → parse → strip
 4. Return `ChatResponse`
 
 ## Files

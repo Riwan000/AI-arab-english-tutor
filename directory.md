@@ -27,7 +27,10 @@ AI-arab-english-tutor/
 │   └── summary.py              # End-session performance summary
 │
 ├── prompts/
-│   ├── system_prompt.py        # Base system prompt template
+│   ├── system_prompt.yaml      # Base system prompt template
+│   ├── lesson_context.yaml     # Lesson-specific context template
+│   ├── start_conversation.yaml # Opening message template
+│   ├── prompt_loader.py        # Loads YAML prompt files
 │   └── prompt_builder.py       # Builds lesson-aware prompts per request
 │
 ├── services/                   # Business logic (no UI)
@@ -84,7 +87,7 @@ AI-arab-english-tutor/
 | LLM service | `llm.py` | `openrouter.py` | `openrouter.py` |
 | Grammar service | `grammar_parser.py` | `grammar.py` | `grammar.py` |
 | Prompt builder location | `services/` | `prompts/` | `prompts/` |
-| System prompt | `system_prompt.txt` | `system_prompt.py` | `system_prompt.py` |
+| System prompt | `system_prompt.txt` | `system_prompt.py` | `system_prompt.yaml` (+ related YAML templates) |
 | DB folder | `data/sessions.db` | `database/english_tutor.db` | `database/english_tutor.db` |
 
 ---

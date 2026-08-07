@@ -462,6 +462,14 @@ Practice Present Simple again tomorrow.
 
 # 8. AI Prompt Design
 
+Prompt templates are stored as **YAML files** in `prompts/` (not embedded in Python):
+
+- `system_prompt.yaml` — base tutor behavior and JSON correction format
+- `lesson_context.yaml` — lesson rules, vocabulary, student level, native language
+- `start_conversation.yaml` — opening message when a session begins
+
+`prompt_loader.py` reads the YAML; `prompt_builder.py` fills placeholders and appends conversation history.
+
 ## System Prompt Inputs
 
 Every conversation receives
@@ -620,8 +628,11 @@ english-ai-tutor/
 ├── app.py
 
 ├── prompts/
-│   ├── system_prompt.txt
-│   ├── lesson_prompt.py
+│   ├── system_prompt.yaml
+│   ├── lesson_context.yaml
+│   ├── start_conversation.yaml
+│   ├── prompt_loader.py
+│   └── prompt_builder.py
 
 ├── lessons/
 │   ├── present_simple.json
@@ -635,9 +646,9 @@ english-ai-tutor/
 │   ├── sidebar.py
 
 ├── services/
-│   ├── llm.py
-│   ├── prompt_builder.py
-│   ├── grammar_parser.py
+│   ├── openrouter.py
+│   ├── grammar.py
+│   └── scoring.py
 
 ├── models/
 │   ├── lesson.py

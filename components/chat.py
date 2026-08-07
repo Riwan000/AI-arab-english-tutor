@@ -5,9 +5,8 @@ from datetime import datetime, timezone
 import streamlit as st
 
 from components.correction_card import render_correction_card
-from prompts.prompt_builder import build_messages
-from services.grammar import extract_feedback
-from services.openrouter import chat_completion
+from services.conversation import send_message, start_conversation
+from services.errors import AppError
 
 
 def render_chat() -> None:
@@ -39,11 +38,15 @@ def _message_metadata(lesson: dict) -> dict:
 
 
 def _start_conversation(lesson: dict) -> None:
-    messages = build_messages(lesson, st.session_state.messages, start=True)
-    response = chat_completion(messages)
+    try:
+        result = start_conversation(lesson["id"])
+    except AppError as exc:
+        st.error(exc.detail)
+        return
+
     assistant_message = {
         "role": "assistant",
-        "content": response,
+        "content": result.reply,
         "has_correction": False,
         **_message_metadata(lesson),
     }
@@ -59,19 +62,26 @@ def _handle_user_message(user_text: str, lesson: dict) -> None:
     })
     user_message_index = len(st.session_state.messages) - 1
 
-    messages = build_messages(lesson, st.session_state.messages)
-    response = chat_completion(messages)
-    feedback = extract_feedback(response)
+    try:
+        result = send_message(
+            lesson_id=lesson["id"],
+            messages=st.session_state.messages[:-1],
+            user_text=user_text,
+        )
+    except AppError as exc:
+        st.error(exc.detail)
+        st.session_state.messages.pop()
+        return
 
+    feedback = [item.model_dump() for item in result.corrections]
     if feedback:
-        for item in feedback:
-            entry = item.model_dump() if hasattr(item, "model_dump") else dict(item)
+        for entry in feedback:
             entry["message_index"] = user_message_index
             st.session_state.mistakes.append(entry)
 
     assistant_message = {
         "role": "assistant",
-        "content": response,
+        "content": result.reply,
         "feedback": feedback,
         "has_correction": bool(feedback),
         **_message_metadata(lesson),

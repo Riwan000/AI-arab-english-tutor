@@ -1,6 +1,10 @@
 """Builds lesson-aware prompts for the OpenRouter API."""
 
-from prompts.system_prompt import SYSTEM_PROMPT
+from prompts.prompt_loader import (
+    get_lesson_context_template,
+    get_start_message_template,
+    get_system_prompt,
+)
 
 
 def build_messages(
@@ -15,12 +19,10 @@ def build_messages(
         messages.append({"role": msg["role"], "content": msg["content"]})
 
     if start:
+        template = get_start_message_template()
         messages.append({
             "role": "user",
-            "content": (
-                f"Start a guided conversation to practice {lesson['title']}. "
-                "Greet the student and ask your first simple question."
-            ),
+            "content": template.format(title=lesson["title"]),
         })
 
     return messages
@@ -29,22 +31,15 @@ def build_messages(
 def _build_system_content(lesson: dict) -> str:
     rules = "\n".join(f"- {rule}" for rule in lesson.get("grammar_rules", []))
     vocabulary = ", ".join(lesson.get("allowed_vocabulary", []))
+    template = get_lesson_context_template()
 
-    return f"""{SYSTEM_PROMPT}
+    lesson_context = template.format(
+        title=lesson["title"],
+        description=lesson["description"],
+        grammar_rules=rules,
+        vocabulary=vocabulary,
+        student_level="A1–A2 beginner",
+        native_language="Arabic",
+    )
 
-## Current Lesson
-Title: {lesson['title']}
-Description: {lesson['description']}
-
-## Grammar Rules
-{rules}
-
-## Allowed Vocabulary
-{vocabulary}
-
-## Student Level
-A1–A2 beginner
-
-## Native Language
-Arabic
-"""
+    return f"{get_system_prompt()}\n\n{lesson_context}"
