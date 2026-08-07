@@ -2,13 +2,21 @@
 
 import streamlit as st
 
+import api_client
+
 
 def render_lesson_view() -> None:
-    lesson = st.session_state.get("lesson")
-
-    if not lesson:
+    lesson_meta = st.session_state.get("lesson")
+    if not lesson_meta or not lesson_meta.get("id"):
         st.warning("Please select a lesson from the sidebar.")
         return
+
+    lesson = api_client.get_lesson(lesson_meta["id"])
+    if not lesson:
+        st.warning("Could not load lesson details.")
+        return
+
+    st.session_state.lesson = lesson
 
     st.header(lesson["title"])
     st.write(lesson["description"])

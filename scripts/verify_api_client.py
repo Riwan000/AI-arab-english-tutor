@@ -47,6 +47,7 @@ def test_list_lessons() -> None:
             assert result == lessons
             mock_get.assert_called_once_with(
                 "http://test-backend:9000/api/v1/lessons",
+                params=None,
                 timeout=api_client.DEFAULT_TIMEOUT,
             )
 
@@ -61,6 +62,7 @@ def test_get_lesson() -> None:
             assert result == lesson
             mock_get.assert_called_once_with(
                 "http://test-backend:9000/api/v1/lessons/present_simple",
+                params=None,
                 timeout=api_client.DEFAULT_TIMEOUT,
             )
 
@@ -169,6 +171,7 @@ def test_get_session() -> None:
             assert result == session
             mock_get.assert_called_once_with(
                 "http://test-backend:9000/api/v1/sessions/1",
+                params=None,
                 timeout=api_client.DEFAULT_TIMEOUT,
             )
 
@@ -177,6 +180,33 @@ def test_base_url_strips_slash() -> None:
     fake_st = _mock_st("http://localhost:8000/")
     with patch.object(api_client, "st", fake_st):
         assert api_client.base_url() == "http://localhost:8000"
+
+
+def test_health_check_returns_false_on_error() -> None:
+    fake_st = _mock_st()
+    with patch.object(api_client, "st", fake_st):
+        with patch("api_client.httpx.get", side_effect=httpx.RequestError("down")):
+            assert api_client.health_check() is False
+
+
+def test_send_message_timeout_returns_fallback() -> None:
+    fake_st = _mock_st()
+    with patch.object(api_client, "st", fake_st):
+        with patch("api_client.httpx.post", side_effect=httpx.TimeoutException("slow")):
+            result = api_client.send_message("present_simple", [], "hi")
+            assert result == {"reply": "", "corrections": []}
+            fake_st.error.assert_called_once()
+
+
+def test_list_lessons_http_error_returns_empty() -> None:
+    fake_st = _mock_st()
+    request = httpx.Request("GET", "http://test-backend:9000/api/v1/lessons")
+    response = httpx.Response(502, json={"detail": "Server error"}, request=request)
+    with patch.object(api_client, "st", fake_st):
+        with patch("api_client.httpx.get", return_value=response):
+            result = api_client.list_lessons()
+            assert result == []
+            fake_st.error.assert_called_once_with("Server error")
 
 
 if __name__ == "__main__":
@@ -189,4 +219,7 @@ if __name__ == "__main__":
     test_list_sessions()
     test_get_session()
     test_base_url_strips_slash()
-    print("api_client verification (issue #47): OK")
+    test_health_check_returns_false_on_error()
+    test_send_message_timeout_returns_fallback()
+    test_list_lessons_http_error_returns_empty()
+    print("api_client verification (issues #47–#48): OK")

@@ -2,12 +2,12 @@
 
 import streamlit as st
 
-from services.conversation import end_session
+import api_client
 from services.scoring import calculate_session_summary
 
 
 def persist_session() -> int | None:
-    """Save the current session to SQLite if it has messages and is not yet persisted."""
+    """Save the current session via API if it has messages and is not yet persisted."""
     if st.session_state.get("session_persisted"):
         return st.session_state.get("saved_conversation_id")
 
@@ -23,16 +23,16 @@ def persist_session() -> int | None:
     )
     st.session_state.score = summary
 
-    result = end_session(
+    result = api_client.save_session(
         lesson_id=lesson["id"],
         messages=messages,
         mistakes=st.session_state.mistakes,
     )
 
-    if result:
+    if result and result.get("id"):
         st.session_state.session_persisted = True
-        st.session_state.saved_conversation_id = result.id
-        return result.id
+        st.session_state.saved_conversation_id = result["id"]
+        return result["id"]
 
     return None
 

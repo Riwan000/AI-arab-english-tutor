@@ -2,6 +2,7 @@
 
 import streamlit as st
 
+import api_client
 from components.chat import render_chat
 from components.lesson_view import render_lesson_view
 from components.sidebar import render_sidebar
@@ -33,6 +34,15 @@ def main() -> None:
     )
 
     init_session_state()
+
+    if "backend_checked" not in st.session_state:
+        if not api_client.health_check():
+            st.warning(
+                "Cannot reach the backend API. Start uvicorn "
+                "(uvicorn api.main:app --reload --port 8000) and check BACKEND_URL "
+                "in .streamlit/secrets.toml."
+            )
+        st.session_state.backend_checked = True
 
     render_sidebar()
 

@@ -4,8 +4,7 @@ from datetime import datetime
 
 import streamlit as st
 
-from repositories.session_repo import SessionRepository
-from services.lessons import get_lesson, list_lessons
+import api_client
 
 
 def _format_date(iso_timestamp: str) -> str:
@@ -17,8 +16,7 @@ def _format_date(iso_timestamp: str) -> str:
 
 
 def render_past_sessions() -> None:
-    repo = SessionRepository()
-    sessions = repo.list_recent(limit=10)
+    sessions = api_client.list_sessions(limit=10)
     if not sessions:
         st.caption("No past sessions yet.")
         return
@@ -30,14 +28,14 @@ def render_past_sessions() -> None:
             f"{_format_date(session['ended_at'])}"
         )
         with st.expander(label):
-            detail = repo.get_summary(session["id"])
+            detail = api_client.get_session(session["id"])
             if not detail:
                 continue
             st.write(f"**Exchanges:** {detail['exchange_count']}")
             st.write(f"**Mistakes:** {detail['mistake_count']}")
-            if detail["vocabulary"]:
+            if detail.get("vocabulary"):
                 st.write(f"**Vocabulary:** {', '.join(detail['vocabulary'])}")
-            if detail["mistake_types"]:
+            if detail.get("mistake_types"):
                 st.write("**Mistake types:**")
                 for mt in detail["mistake_types"]:
                     st.write(f"• {mt['mistake_type']} ({mt['count']})")
@@ -49,8 +47,12 @@ def render_sidebar() -> None:
     with st.sidebar:
         st.title("📚 English Tutor")
 
-        summaries = list_lessons()
-        lesson_titles = {summary.title: summary.id for summary in summaries}
+        summaries = api_client.list_lessons()
+        if not summaries:
+            st.warning("No lessons available. Check backend connection.")
+            return
+
+        lesson_titles = {summary["title"]: summary["id"] for summary in summaries}
 
         selected_title = st.selectbox(
             "Choose a lesson",
@@ -59,8 +61,9 @@ def render_sidebar() -> None:
         )
 
         if selected_title:
-            lesson = get_lesson(lesson_titles[selected_title])
-            st.session_state.lesson = lesson.model_dump()
+            lesson = api_client.get_lesson(lesson_titles[selected_title])
+            if lesson:
+                st.session_state.lesson = lesson
 
         st.divider()
         st.subheader("Progress")

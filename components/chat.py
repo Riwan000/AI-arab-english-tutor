@@ -4,9 +4,8 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
+import api_client
 from components.correction_card import render_correction_card
-from services.conversation import send_message, start_conversation
-from services.errors import AppError
 
 
 def render_chat() -> None:
@@ -38,15 +37,13 @@ def _message_metadata(lesson: dict) -> dict:
 
 
 def _start_conversation(lesson: dict) -> None:
-    try:
-        result = start_conversation(lesson["id"])
-    except AppError as exc:
-        st.error(exc.detail)
+    result = api_client.start_chat(lesson["id"])
+    if not result.get("reply"):
         return
 
     assistant_message = {
         "role": "assistant",
-        "content": result.reply,
+        "content": result["reply"],
         "has_correction": False,
         **_message_metadata(lesson),
     }
@@ -62,18 +59,16 @@ def _handle_user_message(user_text: str, lesson: dict) -> None:
     })
     user_message_index = len(st.session_state.messages) - 1
 
-    try:
-        result = send_message(
-            lesson_id=lesson["id"],
-            messages=st.session_state.messages[:-1],
-            user_text=user_text,
-        )
-    except AppError as exc:
-        st.error(exc.detail)
+    result = api_client.send_message(
+        lesson_id=lesson["id"],
+        messages=st.session_state.messages[:-1],
+        user_text=user_text,
+    )
+    if not result.get("reply"):
         st.session_state.messages.pop()
         return
 
-    feedback = [item.model_dump() for item in result.corrections]
+    feedback = result.get("corrections", [])
     if feedback:
         for entry in feedback:
             entry["message_index"] = user_message_index
@@ -81,7 +76,7 @@ def _handle_user_message(user_text: str, lesson: dict) -> None:
 
     assistant_message = {
         "role": "assistant",
-        "content": result.reply,
+        "content": result["reply"],
         "feedback": feedback,
         "has_correction": bool(feedback),
         **_message_metadata(lesson),

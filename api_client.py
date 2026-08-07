@@ -6,6 +6,11 @@ import streamlit as st
 DEFAULT_TIMEOUT = 10.0
 CHAT_TIMEOUT = 35.0
 
+BACKEND_UNAVAILABLE = "Could not connect to the backend. Check BACKEND_URL and ensure the API is running."
+CHAT_TIMEOUT_MESSAGE = "The tutor took too long to respond. Please try again."
+REQUEST_TIMEOUT_MESSAGE = "The request took too long. Please try again."
+LLM_UNAVAILABLE = "The AI tutor is temporarily unavailable. Please try again."
+
 
 def base_url() -> str:
     """Return BACKEND_URL from Streamlit secrets, with local default."""
@@ -44,35 +49,93 @@ def _serialize_mistake(mistake: dict | object) -> dict:
     }
 
 
+def _error_detail(response: httpx.Response) -> str:
+    try:
+        detail = response.json().get("detail")
+        if detail:
+            return str(detail)
+    except Exception:
+        pass
+    return LLM_UNAVAILABLE
+
+
+def _show_error(message: str) -> None:
+    st.error(message)
+
+
+def _request_get(
+    path: str,
+    *,
+    params: dict | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
+    fallback: object,
+    timeout_message: str = REQUEST_TIMEOUT_MESSAGE,
+) -> object:
+    try:
+        response = httpx.get(_url(path), params=params, timeout=timeout)
+        response.raise_for_status()
+        return response.json()
+    except httpx.TimeoutException:
+        _show_error(timeout_message)
+    except httpx.HTTPStatusError as exc:
+        _show_error(_error_detail(exc.response))
+    except httpx.RequestError:
+        _show_error(BACKEND_UNAVAILABLE)
+    return fallback
+
+
+def _request_post(
+    path: str,
+    *,
+    json: dict,
+    timeout: float = DEFAULT_TIMEOUT,
+    fallback: object,
+    timeout_message: str = REQUEST_TIMEOUT_MESSAGE,
+) -> object:
+    try:
+        response = httpx.post(_url(path), json=json, timeout=timeout)
+        response.raise_for_status()
+        return response.json()
+    except httpx.TimeoutException:
+        _show_error(timeout_message)
+    except httpx.HTTPStatusError as exc:
+        _show_error(_error_detail(exc.response))
+    except httpx.RequestError:
+        _show_error(BACKEND_UNAVAILABLE)
+    return fallback
+
+
 def health_check() -> bool:
-    response = httpx.get(_url("/api/v1/health"), timeout=DEFAULT_TIMEOUT)
-    response.raise_for_status()
-    return response.json().get("status") == "ok"
+    """Return True when the backend health endpoint responds ok (no UI error banner)."""
+    try:
+        response = httpx.get(_url("/api/v1/health"), timeout=DEFAULT_TIMEOUT)
+        response.raise_for_status()
+        return response.json().get("status") == "ok"
+    except (httpx.HTTPError, httpx.RequestError):
+        return False
 
 
 def list_lessons() -> list[dict]:
-    response = httpx.get(_url("/api/v1/lessons"), timeout=DEFAULT_TIMEOUT)
-    response.raise_for_status()
-    return response.json().get("lessons", [])
+    data = _request_get("/api/v1/lessons", fallback={})
+    if isinstance(data, dict):
+        return data.get("lessons", [])
+    return []
 
 
-def get_lesson(lesson_id: str) -> dict:
-    response = httpx.get(
-        _url(f"/api/v1/lessons/{lesson_id}"),
-        timeout=DEFAULT_TIMEOUT,
-    )
-    response.raise_for_status()
-    return response.json()
+def get_lesson(lesson_id: str) -> dict | None:
+    data = _request_get(f"/api/v1/lessons/{lesson_id}", fallback=None)
+    return data if isinstance(data, dict) else None
 
 
 def start_chat(lesson_id: str) -> dict:
-    response = httpx.post(
-        _url("/api/v1/chat/start"),
+    data = _request_post(
+        "/api/v1/chat/start",
         json={"lesson_id": lesson_id},
         timeout=CHAT_TIMEOUT,
+        fallback={"reply": "", "corrections": []},
+        timeout_message=CHAT_TIMEOUT_MESSAGE,
     )
-    response.raise_for_status()
-    return response.json()
+    return data if isinstance(data, dict) else {"reply": "", "corrections": []}
 
 
 def send_message(lesson_id: str, messages: list, user_text: str) -> dict:
@@ -81,43 +144,41 @@ def send_message(lesson_id: str, messages: list, user_text: str) -> dict:
         "messages": [_serialize_message(m) for m in messages]
         + [{"role": "user", "content": user_text}],
     }
-    response = httpx.post(
-        _url("/api/v1/chat/message"),
+    data = _request_post(
+        "/api/v1/chat/message",
         json=payload,
         timeout=CHAT_TIMEOUT,
+        fallback={"reply": "", "corrections": []},
+        timeout_message=CHAT_TIMEOUT_MESSAGE,
     )
-    response.raise_for_status()
-    return response.json()
+    return data if isinstance(data, dict) else {"reply": "", "corrections": []}
 
 
-def save_session(lesson_id: str, messages: list, mistakes: list) -> dict:
-    response = httpx.post(
-        _url("/api/v1/sessions"),
+def save_session(lesson_id: str, messages: list, mistakes: list) -> dict | None:
+    data = _request_post(
+        "/api/v1/sessions",
         json={
             "lesson_id": lesson_id,
             "messages": [_serialize_message(m) for m in messages],
             "mistakes": [_serialize_mistake(m) for m in mistakes],
         },
         timeout=DEFAULT_TIMEOUT,
+        fallback=None,
     )
-    response.raise_for_status()
-    return response.json()
+    return data if isinstance(data, dict) else None
 
 
 def list_sessions(limit: int = 10) -> list[dict]:
-    response = httpx.get(
-        _url("/api/v1/sessions"),
+    data = _request_get(
+        "/api/v1/sessions",
         params={"limit": limit},
-        timeout=DEFAULT_TIMEOUT,
+        fallback={},
     )
-    response.raise_for_status()
-    return response.json().get("sessions", [])
+    if isinstance(data, dict):
+        return data.get("sessions", [])
+    return []
 
 
-def get_session(session_id: int) -> dict:
-    response = httpx.get(
-        _url(f"/api/v1/sessions/{session_id}"),
-        timeout=DEFAULT_TIMEOUT,
-    )
-    response.raise_for_status()
-    return response.json()
+def get_session(session_id: int) -> dict | None:
+    data = _request_get(f"/api/v1/sessions/{session_id}", fallback=None)
+    return data if isinstance(data, dict) else None
