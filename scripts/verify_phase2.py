@@ -1,4 +1,4 @@
-"""API smoke tests for Phase 2 endpoints (issues #30–#46)."""
+"""API smoke tests for Phase 2 endpoints (issues #59–#62)."""
 
 import os
 import sys
@@ -139,9 +139,18 @@ def test_api_client_base_url() -> None:
 
 if __name__ == "__main__":
     test_health()
+    print("Issue #59: GET /api/v1/health returns 200 — OK")
+
     test_lessons_list()
+    print("Issue #60: GET /api/v1/lessons returns 5 lessons — OK")
+
     test_lesson_detail()
+
     test_chat_start_and_message_mocked()
+    print("Issue #61: POST /chat/message returns clean reply + corrections — OK")
+
     test_sessions_crud()
+    print("Issue #62: POST /sessions saves and returns summary — OK")
+
     test_api_client_base_url()
-    print("Phase 2 API verification (issues #30–#46): OK")
+    print("Phase 2 API verification (issues #59–#62): OK")
