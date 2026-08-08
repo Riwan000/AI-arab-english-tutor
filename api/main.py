@@ -26,7 +26,12 @@ async def lifespan(app: FastAPI):
     openrouter.OPENROUTER_BASE_URL = settings.openrouter_base_url
     openrouter.DEFAULT_MODEL = settings.default_model
 
-    get_session_repository().purge_old(settings.retention_days)
+    try:
+        database.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        get_session_repository().purge_old(settings.retention_days)
+    except OSError:
+        pass  # DB unavailable at startup — health check should still pass
+
     yield
 
 

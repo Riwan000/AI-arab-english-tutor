@@ -2,20 +2,16 @@
 # Deploy: Render Dashboard → New → Blueprint → connect this repo
 # Streamlit frontend deploys separately on Streamlit Cloud.
 #
-# Persistent SQLite (issue #66): disk below requires Starter plan or higher.
-# For free-tier demo without persistence, comment out the `disk` block and set plan: free.
+# Persistent SQLite (issue #66): add via Render Dashboard → Disks → mount /app/database
+# (requires Starter plan; not supported on free tier — do not add `disk` here on free).
 
 services:
   - type: web
     name: ai-english-tutor-api
     runtime: docker
-    plan: starter
+    plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/v1/health
-    disk:
-      name: sqlite-data
-      mountPath: /app/database
-      sizeGB: 1
     envVars:
       - key: OPENROUTER_API_KEY
         sync: false

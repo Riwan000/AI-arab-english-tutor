@@ -100,7 +100,7 @@ By default, SQLite on Render is **ephemeral** — data resets on redeploy. To ke
 
 #### New Blueprint deploys
 
-`render.yaml` includes the disk block and `plan: starter`. To stay on free tier without persistence, set `plan: free` and remove the `disk` block before deploying.
+`render.yaml` uses the **free** plan by default. Add a persistent disk manually in the Render Dashboard after upgrading to Starter (see above). Do not add a `disk` block to `render.yaml` on the free plan — it will fail to deploy.
 
 ### Free-tier notes
 
