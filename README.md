@@ -51,6 +51,43 @@ $env:BACKEND_URL="http://localhost:8000"; streamlit run app.py
 
 The frontend talks to the API over HTTP. `OPENROUTER_API_KEY` must only be set in the backend `.env`, never in Streamlit secrets.
 
+## Deploy API to Render (free tier)
+
+The repo includes a `Dockerfile` and `render.yaml` for [Render](https://render.com).
+
+### Option A — Blueprint (recommended)
+
+1. Push this repo to GitHub.
+2. In [Render](https://dashboard.render.com): **New → Blueprint** → connect the repo.
+3. When prompted, set secrets:
+   - `OPENROUTER_API_KEY` — from [OpenRouter](https://openrouter.ai/keys)
+   - `CORS_ORIGINS` — your Streamlit Cloud URL (e.g. `https://your-app.streamlit.app`). Use `http://localhost:8501` until Streamlit is deployed.
+4. Deploy. When live, open `https://<your-service>.onrender.com/api/v1/health` — expect `{"status":"ok"}`.
+
+### Option B — Manual web service
+
+1. **New → Web Service** → connect repo.
+2. **Runtime:** Docker · **Instance type:** Free.
+3. **Health check path:** `/api/v1/health`
+4. **Environment variables:**
+
+| Key | Value |
+|-----|-------|
+| `OPENROUTER_API_KEY` | your OpenRouter key |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` |
+| `DEFAULT_MODEL` | `openai/gpt-4.1` |
+| `DATABASE_PATH` | `/app/database/english_tutor.db` |
+| `RETENTION_DAYS` | `5` |
+| `CORS_ORIGINS` | Streamlit Cloud URL (comma-separated if multiple) |
+
+5. Deploy and verify the health endpoint.
+
+### Free-tier notes
+
+- The service **spins down after ~15 min idle**; the first request after that may take 30–60s (cold start).
+- SQLite on the free tier is **ephemeral** — session data may reset on redeploy. Fine for demo; use a persistent disk or Postgres for production.
+- After Streamlit Cloud deploy, set `BACKEND_URL` in Streamlit secrets to your Render URL (e.g. `https://ai-english-tutor-api.onrender.com`).
+
 ## Docs
 
 - [prd.md](prd.md) — product requirements

@@ -1,0 +1,24 @@
+# Render Blueprint — FastAPI backend only (issue #64)
+# Deploy: Render Dashboard → New → Blueprint → connect this repo
+# Streamlit frontend deploys separately on Streamlit Cloud.
+
+services:
+  - type: web
+    name: ai-english-tutor-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: DEFAULT_MODEL
+        value: openai/gpt-4.1
+      - key: DATABASE_PATH
+        value: /app/database/english_tutor.db
+      - key: RETENTION_DAYS
+        value: "5"
+      - key: CORS_ORIGINS
+        sync: false
