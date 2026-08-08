@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r requirements-api.txt
 
 COPY . .
 
-RUN mkdir -p database
+RUN mkdir -p /app/database
 
 EXPOSE 8000
 

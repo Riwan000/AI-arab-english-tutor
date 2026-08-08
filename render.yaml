@@ -1,14 +1,21 @@
 # Render Blueprint — FastAPI backend only (issue #64)
 # Deploy: Render Dashboard → New → Blueprint → connect this repo
 # Streamlit frontend deploys separately on Streamlit Cloud.
+#
+# Persistent SQLite (issue #66): disk below requires Starter plan or higher.
+# For free-tier demo without persistence, comment out the `disk` block and set plan: free.
 
 services:
   - type: web
     name: ai-english-tutor-api
     runtime: docker
-    plan: free
+    plan: starter
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/v1/health
+    disk:
+      name: sqlite-data
+      mountPath: /app/database
+      sizeGB: 1
     envVars:
       - key: OPENROUTER_API_KEY
         sync: false

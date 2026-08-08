@@ -82,10 +82,31 @@ The repo includes a `Dockerfile` and `render.yaml` for [Render](https://render.c
 
 5. Deploy and verify the health endpoint.
 
+### Optional: Persistent SQLite disk (issue #66)
+
+By default, SQLite on Render is **ephemeral** — data resets on redeploy. To keep past sessions across deploys, mount a persistent disk at `/app/database`.
+
+**Requirements:** Starter plan or higher (~$7/mo). Free tier cannot attach disks.
+
+#### Already deployed via Blueprint
+
+1. Render Dashboard → **ai-english-tutor-api** → **Disks** → **Add Disk**
+   - **Name:** `sqlite-data`
+   - **Mount path:** `/app/database`
+   - **Size:** 1 GB
+2. Upgrade to **Starter** if prompted (required for disks).
+3. Confirm `DATABASE_PATH` = `/app/database/english_tutor.db` (Environment tab).
+4. Redeploy. End a session, trigger a redeploy, then check past sessions still appear.
+
+#### New Blueprint deploys
+
+`render.yaml` includes the disk block and `plan: starter`. To stay on free tier without persistence, set `plan: free` and remove the `disk` block before deploying.
+
 ### Free-tier notes
 
 - The service **spins down after ~15 min idle**; the first request after that may take 30–60s (cold start).
-- SQLite on the free tier is **ephemeral** — session data may reset on redeploy. Fine for demo; use a persistent disk or Postgres for production.
+- Without a persistent disk, SQLite data may reset on redeploy. Fine for demo.
+- With a persistent disk (Starter+), session data survives redeploys.
 - After Streamlit Cloud deploy, set `BACKEND_URL` in Streamlit secrets to your Render URL (e.g. `https://ai-english-tutor-api.onrender.com`).
 
 ## Docs
