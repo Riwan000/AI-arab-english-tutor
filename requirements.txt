@@ -8,5 +8,6 @@ pyyaml>=6.0.0
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 pydantic-settings>=2.2.0
+bcrypt>=4.0.0
 
 # API-only split for separate deployment: see requirements-api.txt

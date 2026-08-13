@@ -37,3 +37,8 @@ class LLMTimeoutError(LLMError):
 
 class LLMRateLimitError(LLMError):
     detail = "Too many requests. Please wait a moment and try again."
+
+
+class PasswordTooLongError(AppError):
+    status_code = 400
+    detail = "Password must be 72 bytes or fewer"
