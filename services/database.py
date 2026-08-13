@@ -22,10 +22,10 @@ def get_connection() -> sqlite3.Connection:
 
 
 def _init_schema(conn: sqlite3.Connection) -> None:
-    if _needs_migration(conn):
-        if _table_exists(conn, "schema_version"):
-            conn.execute("DROP TABLE IF EXISTS schema_version")
-        _drop_tables(conn)
+    _ensure_accounts_schema(conn)
+
+    if _needs_conversation_migration(conn):
+        _drop_conversation_tables(conn)
         _create_tables(conn)
         conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")
         conn.execute("DELETE FROM schema_version")
@@ -33,7 +33,7 @@ def _init_schema(conn: sqlite3.Connection) -> None:
         conn.commit()
 
 
-def _needs_migration(conn: sqlite3.Connection) -> bool:
+def _needs_conversation_migration(conn: sqlite3.Connection) -> bool:
     if not _table_exists(conn, "conversations"):
         return True
 
@@ -63,7 +63,19 @@ def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
     return row is not None
 
 
-def _drop_tables(conn: sqlite3.Connection) -> None:
+def _ensure_accounts_schema(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+    """)
+
+
+def _drop_conversation_tables(conn: sqlite3.Connection) -> None:
     conn.executescript("""
         DROP TABLE IF EXISTS grammar_feedback;
         DROP TABLE IF EXISTS messages;
@@ -73,7 +85,7 @@ def _drop_tables(conn: sqlite3.Connection) -> None:
 
 def _create_tables(conn: sqlite3.Connection) -> None:
     conn.executescript("""
-        CREATE TABLE conversations (
+        CREATE TABLE IF NOT EXISTS conversations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             lesson_id TEXT NOT NULL,
             lesson_title TEXT NOT NULL,
@@ -87,7 +99,7 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             model_used TEXT
         );
 
-        CREATE TABLE messages (
+        CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             conversation_id INTEGER NOT NULL,
             role TEXT NOT NULL,
@@ -99,7 +111,7 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
         );
 
-        CREATE TABLE grammar_feedback (
+        CREATE TABLE IF NOT EXISTS grammar_feedback (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             conversation_id INTEGER NOT NULL,
             message_id INTEGER NOT NULL,
