@@ -74,6 +74,16 @@ _USERS_TABLE_BODY = """(
         )"""
 
 
+_AUTH_ATTEMPTS_TABLE_BODY = """(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip TEXT NOT NULL,
+            email TEXT NOT NULL,
+            window_date TEXT NOT NULL,
+            count INTEGER NOT NULL DEFAULT 0,
+            UNIQUE (ip, email, window_date)
+        )"""
+
+
 def _ensure_accounts_schema(conn: sqlite3.Connection) -> None:
     """Create the accounts tables if absent, then apply additive account migrations.
 
@@ -81,6 +91,7 @@ def _ensure_accounts_schema(conn: sqlite3.Connection) -> None:
     conversation schema, which is versioned and recreated destructively.
     """
     conn.execute(f"CREATE TABLE IF NOT EXISTS users{_USERS_TABLE_BODY};")
+    conn.execute(f"CREATE TABLE IF NOT EXISTS auth_attempts{_AUTH_ATTEMPTS_TABLE_BODY};")
     _migrate_users_email_nocase(conn)
 
 
@@ -170,6 +181,25 @@ def _create_tables(conn: sqlite3.Connection) -> None:
         CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);
         CREATE INDEX idx_grammar_feedback_conversation_id ON grammar_feedback(conversation_id);
     """)
+
+
+AUTH_ATTEMPTS_RETENTION_DAYS = 2
+
+
+def purge_old_auth_attempts(retention_days: int = AUTH_ATTEMPTS_RETENTION_DAYS) -> int:
+    """Delete auth_attempts rows older than retention_days. Returns rows deleted.
+
+    The counter is only ever read for today's window_date, so a couple of days
+    of retention is plenty — this just keeps the table from growing unbounded
+    (each distinct (ip, email, day) is its own row).
+    """
+    cutoff = (datetime.now(timezone.utc).date() - timedelta(days=retention_days)).isoformat()
+    conn = get_connection()
+    cursor = conn.execute("DELETE FROM auth_attempts WHERE window_date < ?", (cutoff,))
+    deleted = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return deleted
 
 
 def purge_old_conversations(retention_days: int = RETENTION_DAYS) -> int:
@@ -360,6 +390,34 @@ def get_user_by_email(email: str) -> dict | None:
     finally:
         conn.close()
     return dict(row) if row else None
+
+
+def record_auth_attempt(ip: str, email: str) -> int:
+    """Increment today's (ip, email) auth attempt counter and return the new count.
+
+    Persistent, per-(ip, email) counter keyed on the current UTC date — a
+    restart-safe backstop behind the in-memory per-IP slowapi limiter, aimed
+    at credential-stuffing runs that stay under the per-minute burst limit.
+    """
+    window_date = datetime.now(timezone.utc).date().isoformat()
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO auth_attempts (ip, email, window_date, count)
+            VALUES (?, ?, ?, 1)
+            ON CONFLICT (ip, email, window_date) DO UPDATE SET count = count + 1
+            """,
+            (ip, email, window_date),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT count FROM auth_attempts WHERE ip = ? AND email = ? AND window_date = ?",
+            (ip, email, window_date),
+        ).fetchone()
+        return row["count"]
+    finally:
+        conn.close()
 
 
 def get_user_by_id(user_id: int) -> dict | None:

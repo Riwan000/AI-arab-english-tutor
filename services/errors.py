@@ -50,4 +50,9 @@ class DuplicateEmailError(AppError):
 
 class InvalidCredentialsError(AppError):
     status_code = 401
-    detail = "Invalid email or password" 
+    detail = "Invalid email or password"
+
+
+class TooManyAttemptsError(AppError):
+    status_code = 429
+    detail = "Too many attempts. Please try again later."

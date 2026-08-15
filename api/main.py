@@ -32,6 +32,7 @@ async def lifespan(app: FastAPI):
     try:
         database.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         get_session_repository().purge_old(settings.retention_days)
+        database.purge_old_auth_attempts()
     except OSError:
         pass  # DB unavailable at startup — health check should still pass
 

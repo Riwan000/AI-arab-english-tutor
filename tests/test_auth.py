@@ -2,6 +2,7 @@ import sqlite3
 
 import jwt
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import services.database as db
@@ -148,6 +149,85 @@ def test_create_user_rejects_duplicate_email_regardless_of_case(user_repo):
         user_repo.create_user("DUPE@Example.com", "hashed", "Second")
 
 
+# --- get_current_user dependency ----------------------------------------------
+
+
+@pytest.fixture
+def current_user_settings(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET_KEY", SECRET)
+
+    from api.config import get_settings
+
+    get_settings.cache_clear()
+    yield get_settings()
+    get_settings.cache_clear()
+
+
+def test_get_current_user_returns_user_for_valid_token(user_repo, current_user_settings):
+    from api.dependencies import get_current_user
+
+    user_id = user_repo.create_user("dep@example.com", "hashed", "Dep User")
+    token = create_access_token(user_id, SECRET)
+
+    user = get_current_user(f"Bearer {token}", current_user_settings, user_repo)
+
+    assert user.id == user_id
+    assert user.email == "dep@example.com"
+
+
+def test_get_current_user_rejects_missing_header(user_repo, current_user_settings):
+    from api.dependencies import get_current_user
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_user(None, current_user_settings, user_repo)
+
+    assert exc_info.value.status_code == 401
+
+
+def test_get_current_user_rejects_non_bearer_scheme(user_repo, current_user_settings):
+    from api.dependencies import get_current_user
+
+    user_id = user_repo.create_user("dep2@example.com", "hashed", "Dep User")
+    token = create_access_token(user_id, SECRET)
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_user(f"Token {token}", current_user_settings, user_repo)
+
+    assert exc_info.value.status_code == 401
+
+
+def test_get_current_user_rejects_malformed_token(user_repo, current_user_settings):
+    from api.dependencies import get_current_user
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_user("Bearer not-a-jwt", current_user_settings, user_repo)
+
+    assert exc_info.value.status_code == 401
+
+
+def test_get_current_user_rejects_expired_token(user_repo, current_user_settings):
+    from api.dependencies import get_current_user
+
+    user_id = user_repo.create_user("dep3@example.com", "hashed", "Dep User")
+    token = create_access_token(user_id, SECRET, expiry_hours=-1)
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_user(f"Bearer {token}", current_user_settings, user_repo)
+
+    assert exc_info.value.status_code == 401
+
+
+def test_get_current_user_rejects_token_for_deleted_user(user_repo, current_user_settings):
+    from api.dependencies import get_current_user
+
+    token = create_access_token(999999, SECRET)
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_user(f"Bearer {token}", current_user_settings, user_repo)
+
+    assert exc_info.value.status_code == 401
+
+
 # --- auth routes -------------------------------------------------------------
 
 
@@ -267,6 +347,72 @@ def test_login_rejects_wrong_password_and_unknown_email_identically(client):
     assert wrong_password.status_code == 401
     assert unknown_email.status_code == 401
     assert wrong_password.json() == unknown_email.json()
+
+
+def test_record_auth_attempt_increments_per_ip_and_email(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "attempts.db")
+
+    assert db.record_auth_attempt("1.2.3.4", "a@example.com") == 1
+    assert db.record_auth_attempt("1.2.3.4", "a@example.com") == 2
+    assert db.record_auth_attempt("1.2.3.4", "a@example.com") == 3
+
+
+def test_record_auth_attempt_keeps_separate_counters_per_ip_and_email(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "attempts.db")
+
+    assert db.record_auth_attempt("1.2.3.4", "a@example.com") == 1
+    assert db.record_auth_attempt("5.6.7.8", "a@example.com") == 1
+    assert db.record_auth_attempt("1.2.3.4", "b@example.com") == 1
+    assert db.record_auth_attempt("1.2.3.4", "a@example.com") == 2
+
+
+def test_login_hits_persistent_daily_attempt_cap_beyond_the_burst_limit(client, monkeypatch):
+    # The in-memory slowapi limiter is disabled by the `client` fixture, so this
+    # exercises the DB-backed per-(ip, email) cap in isolation.
+    from api import rate_limit
+
+    monkeypatch.setattr(rate_limit, "AUTH_MAX_ATTEMPTS_PER_DAY", 3)
+
+    login_body = {"email": "victim@example.com", "password": "wrong password"}
+    statuses = [
+        client.post("/api/v1/auth/login", json=login_body).status_code for _ in range(5)
+    ]
+
+    assert statuses[:3] == [401, 401, 401]
+    assert statuses[3:] == [429, 429]
+
+
+def test_signup_hits_persistent_daily_attempt_cap(client, monkeypatch):
+    from api import rate_limit
+
+    monkeypatch.setattr(rate_limit, "AUTH_MAX_ATTEMPTS_PER_DAY", 2)
+
+    statuses = [
+        client.post(
+            "/api/v1/auth/signup",
+            json={**SIGNUP_BODY, "email": f"user{i}@example.com"},
+        ).status_code
+        for i in range(4)
+    ]
+
+    # Each call uses a distinct email but the same client IP, so the cap is
+    # keyed on (ip, email) — every distinct email gets its own 2-attempt budget,
+    # so all four succeed with 201.
+    assert statuses == [201, 201, 201, 201]
+
+
+def test_repeated_signups_for_the_same_email_hit_the_daily_cap(client, monkeypatch):
+    from api import rate_limit
+
+    monkeypatch.setattr(rate_limit, "AUTH_MAX_ATTEMPTS_PER_DAY", 2)
+
+    statuses = [
+        client.post("/api/v1/auth/signup", json=SIGNUP_BODY).status_code for _ in range(4)
+    ]
+
+    assert statuses[0] == 201
+    assert statuses[1] == 409
+    assert statuses[2:] == [429, 429]
 
 
 def test_login_is_rate_limited(tmp_path, monkeypatch):

@@ -109,6 +109,67 @@ def test_users_survives_database_recreation(tmp_path, monkeypatch):
     assert row["password_hash"] == "hashed_password"
 
 
+def test_auth_attempts_table_is_created_with_required_columns(tmp_path, monkeypatch):
+    db_path = tmp_path / "test.db"
+
+    monkeypatch.setattr(db, "DB_PATH", db_path)
+
+    conn = db.get_connection()
+
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='auth_attempts'"
+    ).fetchone()
+    columns = {c["name"] for c in conn.execute("PRAGMA table_info(auth_attempts)").fetchall()}
+
+    conn.close()
+
+    assert row is not None
+    assert {"ip", "email", "window_date", "count"}.issubset(columns)
+
+
+def test_auth_attempts_survives_conversation_schema_bump(tmp_path, monkeypatch):
+    db_path = tmp_path / "test.db"
+
+    monkeypatch.setattr(db, "DB_PATH", db_path)
+
+    assert db.record_auth_attempt("1.2.3.4", "bump@example.com") == 1
+
+    conn = sqlite3.connect(db_path)
+    conn.execute("DELETE FROM schema_version")
+    conn.execute("INSERT INTO schema_version (version) VALUES (0)")
+    conn.commit()
+    conn.close()
+
+    assert db.record_auth_attempt("1.2.3.4", "bump@example.com") == 2
+
+
+def test_purge_old_auth_attempts_removes_stale_rows_only(tmp_path, monkeypatch):
+    db_path = tmp_path / "test.db"
+
+    monkeypatch.setattr(db, "DB_PATH", db_path)
+
+    db.record_auth_attempt("1.2.3.4", "old@example.com")
+    db.record_auth_attempt("1.2.3.4", "fresh@example.com")
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "UPDATE auth_attempts SET window_date = '2000-01-01' WHERE email = ?",
+        ("old@example.com",),
+    )
+    conn.commit()
+    conn.close()
+
+    deleted = db.purge_old_auth_attempts(retention_days=2)
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    remaining = {row["email"] for row in conn.execute("SELECT email FROM auth_attempts").fetchall()}
+    conn.close()
+
+    assert deleted == 1
+    assert remaining == {"fresh@example.com"}
+
+
 def test_acount_data_survives_conversation_schema_change(
         tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
