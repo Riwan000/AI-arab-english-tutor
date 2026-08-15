@@ -11,6 +11,18 @@ CHAT_TIMEOUT_MESSAGE = "The tutor took too long to respond. Please try again."
 REQUEST_TIMEOUT_MESSAGE = "The request took too long. Please try again."
 LLM_UNAVAILABLE = "The AI tutor is temporarily unavailable. Please try again."
 
+_auth_token: str | None = None
+
+
+def set_auth_token(token: str | None) -> None:
+    """Store the JWT in module state so subsequent requests send it as a Bearer header."""
+    global _auth_token
+    _auth_token = token
+
+
+def _auth_headers() -> dict:
+    return {"Authorization": f"Bearer {_auth_token}"} if _auth_token else {}
+
 
 def base_url() -> str:
     """Return BACKEND_URL from Streamlit secrets, with local default."""
@@ -63,6 +75,20 @@ def _show_error(message: str) -> None:
     st.error(message)
 
 
+def _handle_response_error(exc: httpx.HTTPStatusError) -> None:
+    """Show the error, unless this is a stale session — then clear it for app.py to catch.
+
+    A 401 only means "session expired" when we thought we had one (`_auth_token`
+    was set). A 401 with no token set is a normal login/signup credential
+    failure and must surface its own message instead.
+    """
+    if exc.response.status_code == 401 and _auth_token is not None:
+        set_auth_token(None)
+        st.session_state["force_logout"] = True
+        return
+    _show_error(_error_detail(exc.response))
+
+
 def _request_get(
     path: str,
     *,
@@ -72,13 +98,13 @@ def _request_get(
     timeout_message: str = REQUEST_TIMEOUT_MESSAGE,
 ) -> object:
     try:
-        response = httpx.get(_url(path), params=params, timeout=timeout)
+        response = httpx.get(_url(path), params=params, timeout=timeout, headers=_auth_headers())
         response.raise_for_status()
         return response.json()
     except httpx.TimeoutException:
         _show_error(timeout_message)
     except httpx.HTTPStatusError as exc:
-        _show_error(_error_detail(exc.response))
+        _handle_response_error(exc)
     except httpx.RequestError:
         _show_error(BACKEND_UNAVAILABLE)
     return fallback
@@ -93,13 +119,13 @@ def _request_post(
     timeout_message: str = REQUEST_TIMEOUT_MESSAGE,
 ) -> object:
     try:
-        response = httpx.post(_url(path), json=json, timeout=timeout)
+        response = httpx.post(_url(path), json=json, timeout=timeout, headers=_auth_headers())
         response.raise_for_status()
         return response.json()
     except httpx.TimeoutException:
         _show_error(timeout_message)
     except httpx.HTTPStatusError as exc:
-        _show_error(_error_detail(exc.response))
+        _handle_response_error(exc)
     except httpx.RequestError:
         _show_error(BACKEND_UNAVAILABLE)
     return fallback
@@ -113,6 +139,24 @@ def health_check() -> bool:
         return response.json().get("status") == "ok"
     except (httpx.HTTPError, httpx.RequestError):
         return False
+
+
+def signup(email: str, password: str, display_name: str) -> dict | None:
+    data = _request_post(
+        "/api/v1/auth/signup",
+        json={"email": email, "password": password, "display_name": display_name},
+        fallback=None,
+    )
+    return data if isinstance(data, dict) else None
+
+
+def login(email: str, password: str) -> dict | None:
+    data = _request_post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+        fallback=None,
+    )
+    return data if isinstance(data, dict) else None
 
 
 def list_lessons() -> list[dict]:
