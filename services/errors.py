@@ -3,9 +3,9 @@
 
 class AppError(Exception):
     status_code: int = 500
-    detail: str = "Internal server error"
+    detail: str | dict = "Internal server error"
 
-    def __init__(self, detail: str | None = None) -> None:
+    def __init__(self, detail: str | dict | None = None) -> None:
         if detail is not None:
             self.detail = detail
         super().__init__(self.detail)
@@ -56,3 +56,10 @@ class InvalidCredentialsError(AppError):
 class TooManyAttemptsError(AppError):
     status_code = 429
     detail = "Too many attempts. Please try again later."
+
+
+class DailyLimitExceededError(AppError):
+    status_code = 429
+
+    def __init__(self, message: str, remaining: int = 0) -> None:
+        super().__init__({"message": message, "remaining": remaining})

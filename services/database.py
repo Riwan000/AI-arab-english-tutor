@@ -539,3 +539,55 @@ def get_user_by_id(user_id: int) -> dict | None:
     finally:
         conn.close()
     return dict(row) if row else None
+
+
+def increment_daily_message_count(user_id: int) -> int:
+    """Increment today's message count for user_id and return the new count."""
+    usage_date = datetime.now(timezone.utc).date().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO daily_usage (user_id, usage_date, message_count, voice_call_count, updated_at)
+            VALUES (?, ?, 1, 0, ?)
+            ON CONFLICT (user_id, usage_date) DO UPDATE SET
+                message_count = message_count + 1,
+                updated_at = excluded.updated_at
+            """,
+            (user_id, usage_date, now),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT message_count FROM daily_usage WHERE user_id = ? AND usage_date = ?",
+            (user_id, usage_date),
+        ).fetchone()
+        return row["message_count"]
+    finally:
+        conn.close()
+
+
+def increment_daily_voice_call_count(user_id: int) -> int:
+    """Increment today's voice-call count for user_id and return the new count."""
+    usage_date = datetime.now(timezone.utc).date().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO daily_usage (user_id, usage_date, message_count, voice_call_count, updated_at)
+            VALUES (?, ?, 0, 1, ?)
+            ON CONFLICT (user_id, usage_date) DO UPDATE SET
+                voice_call_count = voice_call_count + 1,
+                updated_at = excluded.updated_at
+            """,
+            (user_id, usage_date, now),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT voice_call_count FROM daily_usage WHERE user_id = ? AND usage_date = ?",
+            (user_id, usage_date),
+        ).fetchone()
+        return row["voice_call_count"]
+    finally:
+        conn.close()

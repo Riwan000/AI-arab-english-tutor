@@ -87,3 +87,64 @@ def test_daily_usage_survives_conversation_schema_bump(tmp_path, monkeypatch):
     assert row is not None
     assert row["message_count"] == 5
     assert row["voice_call_count"] == 2
+
+
+# --- increment_daily_message_count / increment_daily_voice_call_count ---------
+
+
+def test_increment_daily_message_count_starts_a_new_row_at_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    user_id = db.create_user("learner@example.com", "hash", "Learner")
+
+    count = db.increment_daily_message_count(user_id)
+
+    assert count == 1
+
+
+def test_increment_daily_message_count_increments_an_existing_row(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    user_id = db.create_user("learner@example.com", "hash", "Learner")
+
+    db.increment_daily_message_count(user_id)
+    db.increment_daily_message_count(user_id)
+    count = db.increment_daily_message_count(user_id)
+
+    assert count == 3
+
+
+def test_increment_daily_voice_call_count_starts_a_new_row_at_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    user_id = db.create_user("learner@example.com", "hash", "Learner")
+
+    count = db.increment_daily_voice_call_count(user_id)
+
+    assert count == 1
+
+
+def test_message_and_voice_counters_are_independent_on_the_same_row(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    user_id = db.create_user("learner@example.com", "hash", "Learner")
+
+    db.increment_daily_message_count(user_id)
+    db.increment_daily_message_count(user_id)
+    db.increment_daily_voice_call_count(user_id)
+
+    conn = db.get_connection()
+    row = conn.execute(
+        "SELECT message_count, voice_call_count FROM daily_usage WHERE user_id = ?",
+        (user_id,),
+    ).fetchone()
+    conn.close()
+
+    assert row["message_count"] == 2
+    assert row["voice_call_count"] == 1
+
+
+def test_increment_daily_message_count_is_scoped_per_user(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    user_a = db.create_user("a@example.com", "hash", "A")
+    user_b = db.create_user("b@example.com", "hash", "B")
+
+    db.increment_daily_message_count(user_a)
+
+    assert db.increment_daily_message_count(user_b) == 1
