@@ -25,3 +25,11 @@ def get_lesson_context_template() -> str:
 
 def get_start_message_template() -> str:
     return _load("start_conversation.yaml")["user_message"]
+
+
+def get_free_talk_context_template() -> str:
+    return _load("free_talk_context.yaml")["template"]
+
+
+def get_difficulty_block(level: str) -> str:
+    return _load("difficulty_levels.yaml")[level]

@@ -1,34 +1,47 @@
 """Builds lesson-aware prompts for the OpenRouter API."""
 
 from prompts.prompt_loader import (
+    get_difficulty_block,
+    get_free_talk_context_template,
     get_lesson_context_template,
     get_start_message_template,
     get_system_prompt,
 )
 
+FREE_TALK_START_MESSAGE = (
+    "Start the conversation. Greet the student and open with a real-world topic."
+)
+
 
 def build_messages(
-    lesson: dict,
+    lesson: dict | None,
     history: list[dict],
     start: bool = False,
+    difficulty: str = "beginner",
+    mode: str = "lesson",
 ) -> list[dict]:
-    system_content = _build_system_content(lesson)
+    system_content = (
+        _build_free_talk_content(difficulty)
+        if mode == "free_talk"
+        else _build_system_content(lesson, difficulty)
+    )
     messages: list[dict] = [{"role": "system", "content": system_content}]
 
     for msg in history:
         messages.append({"role": msg["role"], "content": msg["content"]})
 
     if start:
-        template = get_start_message_template()
-        messages.append({
-            "role": "user",
-            "content": template.format(title=lesson["title"]),
-        })
+        if mode == "free_talk":
+            content = FREE_TALK_START_MESSAGE
+        else:
+            template = get_start_message_template()
+            content = template.format(title=lesson["title"])
+        messages.append({"role": "user", "content": content})
 
     return messages
 
 
-def _build_system_content(lesson: dict) -> str:
+def _build_system_content(lesson: dict, difficulty: str) -> str:
     rules = "\n".join(f"- {rule}" for rule in lesson.get("grammar_rules", []))
     vocabulary = ", ".join(lesson.get("allowed_vocabulary", []))
     template = get_lesson_context_template()
@@ -42,4 +55,19 @@ def _build_system_content(lesson: dict) -> str:
         native_language="Arabic",
     )
 
-    return f"{get_system_prompt()}\n\n{lesson_context}"
+    difficulty_block = get_difficulty_block(difficulty)
+
+    return f"{get_system_prompt()}\n\n{lesson_context}\n\n{difficulty_block}"
+
+
+def _build_free_talk_content(difficulty: str) -> str:
+    template = get_free_talk_context_template()
+
+    free_talk_context = template.format(
+        student_level="A1–A2 beginner",
+        native_language="Arabic",
+    )
+
+    difficulty_block = get_difficulty_block(difficulty)
+
+    return f"{get_system_prompt()}\n\n{free_talk_context}\n\n{difficulty_block}"
