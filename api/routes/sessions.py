@@ -2,9 +2,10 @@
 
 from fastapi import APIRouter, Depends, Query, status
 
-from api.dependencies import get_session_repository
+from api.dependencies import get_current_user, get_session_repository
 from api.schemas.session import SessionCreateRequest, build_session_list_response
 from models.conversation import MistakeTypeCount, SessionDetail, SessionListItem, SessionSummary
+from models.user import User
 from repositories.session_repo import SessionRepository
 from services import conversation
 from services.errors import EmptySessionError, SessionNotFoundError
@@ -13,7 +14,10 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
 @router.post("", response_model=SessionSummary, status_code=status.HTTP_201_CREATED)
-def create_session(body: SessionCreateRequest) -> SessionSummary:
+def create_session(
+    body: SessionCreateRequest,
+    current_user: User = Depends(get_current_user),
+) -> SessionSummary:
     messages = [msg.model_dump(exclude_none=True) for msg in body.messages]
     mistakes = body.mistakes
     result = conversation.end_session(body.lesson_id, messages, mistakes)
@@ -26,6 +30,7 @@ def create_session(body: SessionCreateRequest) -> SessionSummary:
 def list_sessions(
     limit: int = Query(default=10, ge=1, le=50),
     repo: SessionRepository = Depends(get_session_repository),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     rows = repo.list_recent(limit=limit)
     items = [
@@ -48,6 +53,7 @@ def list_sessions(
 def get_session(
     session_id: int,
     repo: SessionRepository = Depends(get_session_repository),
+    current_user: User = Depends(get_current_user),
 ) -> SessionDetail:
     row = repo.get_summary(session_id)
     if row is None:
