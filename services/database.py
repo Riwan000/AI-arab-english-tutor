@@ -297,6 +297,7 @@ def save_session(
     mistakes: list,
     summary: dict,
     model_used: str | None = None,
+    user_id: int | None = None,
 ) -> int | None:
     """Persist a completed session. Returns conversation id or None if nothing to save."""
     if not messages:
@@ -311,12 +312,13 @@ def save_session(
         cursor = conn.execute(
             """
             INSERT INTO conversations (
-                lesson_id, lesson_title, created_at, ended_at,
+                user_id, lesson_id, lesson_title, created_at, ended_at,
                 grammar_score, exchange_count, mistake_count,
                 vocabulary, recommendation, model_used
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                user_id,
                 lesson["id"],
                 lesson["title"],
                 created_at,

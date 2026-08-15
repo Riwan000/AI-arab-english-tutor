@@ -1,4 +1,5 @@
 import services.conversation as conversation
+from repositories.session_repo import SessionRepository
 from services import openrouter
 
 
@@ -66,3 +67,70 @@ def test_send_message_defaults_match_previous_lesson_mode_behavior(monkeypatch):
     conversation.send_message("present_simple", [], "hi")
 
     assert captured == {"lesson_title": "Present Simple", "difficulty": "beginner", "mode": "lesson"}
+
+
+def test_end_session_free_talk_skips_lesson_lookup_and_titles_session(monkeypatch):
+    def fail_get_lesson(lesson_id):
+        raise AssertionError("lessons.get_lesson should not be called in free_talk mode")
+
+    captured = {}
+
+    def fake_save(self, **kwargs):
+        captured.update(kwargs)
+        return 1
+
+    monkeypatch.setattr(conversation.lessons, "get_lesson", fail_get_lesson)
+    monkeypatch.setattr(SessionRepository, "save", fake_save)
+
+    messages = [{"role": "user", "content": "hi"}]
+    result = conversation.end_session(None, messages, [], mode="free_talk")
+
+    assert result is not None
+    assert captured["lesson"] == {"id": None, "title": "Free Talk"}
+
+
+def test_end_session_lesson_mode_resolves_lesson_as_before(monkeypatch):
+    captured = {}
+
+    def fake_save(self, **kwargs):
+        captured.update(kwargs)
+        return 1
+
+    monkeypatch.setattr(SessionRepository, "save", fake_save)
+
+    messages = [{"role": "user", "content": "hi"}]
+    result = conversation.end_session("present_simple", messages, [])
+
+    assert result is not None
+    assert captured["lesson"]["id"] == "present_simple"
+    assert captured["lesson"]["title"] == "Present Simple"
+
+
+def test_end_session_threads_user_id_to_repository_save(monkeypatch):
+    captured = {}
+
+    def fake_save(self, **kwargs):
+        captured.update(kwargs)
+        return 1
+
+    monkeypatch.setattr(SessionRepository, "save", fake_save)
+
+    messages = [{"role": "user", "content": "hi"}]
+    conversation.end_session(None, messages, [], mode="free_talk", user_id=42)
+
+    assert captured["user_id"] == 42
+
+
+def test_end_session_defaults_user_id_to_none(monkeypatch):
+    captured = {}
+
+    def fake_save(self, **kwargs):
+        captured.update(kwargs)
+        return 1
+
+    monkeypatch.setattr(SessionRepository, "save", fake_save)
+
+    messages = [{"role": "user", "content": "hi"}]
+    conversation.end_session("present_simple", messages, [])
+
+    assert captured["user_id"] is None

@@ -40,7 +40,7 @@ class SessionListItem(BaseModel):
     """Item in GET /api/v1/sessions list."""
 
     id: int
-    lesson_id: str
+    lesson_id: str | None
     lesson_title: str
     ended_at: str
     grammar_score: int | None = None
@@ -57,13 +57,13 @@ class MistakeTypeCount(BaseModel):
 class SessionDetail(SessionSummary):
     """Response from GET /api/v1/sessions/{session_id}."""
 
-    lesson_id: str
+    lesson_id: str | None
     lesson_title: str
     mistake_types: list[MistakeTypeCount] = Field(default_factory=list)
 
 
 class Conversation(BaseModel):
     id: int | None = None
-    lesson_id: str
+    lesson_id: str | None
     messages: list[Message] = Field(default_factory=list)
     score: int | None = None

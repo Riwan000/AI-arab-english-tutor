@@ -53,29 +53,35 @@ def _resolve_lesson(lesson_id: str | None, mode: str) -> dict | None:
 
 
 def end_session(
-    lesson_id: str,
+    lesson_id: str | None,
     messages: list[dict],
     mistakes: list,
+    mode: str = "lesson",
+    user_id: int | None = None,
 ) -> SessionSummary | None:
-    """Score session, persist via repository, return summary."""
+    """Score session, persist via repository, return summary. Free Talk has no lesson to look up."""
     if not messages:
         return None
 
-    lesson = lessons.get_lesson(lesson_id)
-    lesson_dict = lesson.model_dump()
+    if mode == "free_talk":
+        lesson_dict, lesson_title = None, "Free Talk"
+    else:
+        lesson = lessons.get_lesson(lesson_id)
+        lesson_dict, lesson_title = lesson.model_dump(), lesson.title
 
     summary = scoring.calculate_session_summary(
         messages=messages,
         mistakes=mistakes,
-        lesson_title=lesson.title,
+        lesson_title=lesson_title,
     )
 
     conversation_id = SessionRepository().save(
-        lesson=lesson_dict,
+        lesson=lesson_dict or {"id": None, "title": "Free Talk"},
         messages=messages,
         mistakes=mistakes,
         summary=summary,
         model_used=os.getenv("DEFAULT_MODEL", openrouter.DEFAULT_MODEL),
+        user_id=user_id,
     )
 
     if conversation_id is None:

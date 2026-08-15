@@ -13,6 +13,7 @@ class SessionRepository:
         mistakes: list,
         summary: dict,
         model_used: str | None = None,
+        user_id: int | None = None,
     ) -> int | None:
         model = model_used or os.getenv("DEFAULT_MODEL", "")
         return database.save_session(
@@ -21,6 +22,7 @@ class SessionRepository:
             mistakes=mistakes,
             summary=summary,
             model_used=model,
+            user_id=user_id,
         )
 
     def list_recent(self, limit: int = 10) -> list[dict]:

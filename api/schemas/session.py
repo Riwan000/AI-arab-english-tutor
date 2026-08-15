@@ -7,7 +7,7 @@ from models.feedback import GrammarFeedback
 
 
 class SessionCreateRequest(BaseModel):
-    lesson_id: str = Field(min_length=1)
+    lesson_id: str | None = Field(default=None, min_length=1)
     messages: list[Message] = Field(min_length=1)
     mistakes: list[GrammarFeedback] = Field(default_factory=list)
 
