@@ -13,6 +13,10 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/v1/health
     envVars:
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: JWT_EXPIRY_HOURS
+        value: "48"
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENROUTER_BASE_URL

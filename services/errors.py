@@ -42,3 +42,12 @@ class LLMRateLimitError(LLMError):
 class PasswordTooLongError(AppError):
     status_code = 400
     detail = "Password must be 72 bytes or fewer"
+
+
+class DuplicateEmailError(AppError):
+    status_code = 409
+    detail = "A user with this email already exists"
+
+class InvalidCredentialsError(AppError):
+    status_code = 401
+    detail = "Invalid email or password" 

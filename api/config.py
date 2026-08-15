@@ -11,9 +11,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore",
+        extra="ignore"
     )
 
+    # min_length=1 so a blank JWT_SECRET_KEY= (as shipped in .env.example) fails
+    # fast at startup instead of signing tokens with an empty secret.
+    jwt_secret_key: str = Field(..., min_length=1)
+    jwt_expiry_hours: int = 48
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     default_model: str = "openai/gpt-4.1"

@@ -63,16 +63,57 @@ def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
     return row is not None
 
 
-def _ensure_accounts_schema(conn: sqlite3.Connection) -> None:
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users(
+_USERS_COLUMNS = "id, email, password_hash, display_name, created_at"
+
+_USERS_TABLE_BODY = """(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
+            email TEXT NOT NULL UNIQUE COLLATE NOCASE,
             password_hash TEXT NOT NULL,
             display_name TEXT NOT NULL,
             created_at TEXT NOT NULL
-        );
-    """)
+        )"""
+
+
+def _ensure_accounts_schema(conn: sqlite3.Connection) -> None:
+    """Create the accounts tables if absent, then apply additive account migrations.
+
+    Runs on every connection and never drops account data — unlike the
+    conversation schema, which is versioned and recreated destructively.
+    """
+    conn.execute(f"CREATE TABLE IF NOT EXISTS users{_USERS_TABLE_BODY};")
+    _migrate_users_email_nocase(conn)
+
+
+def _migrate_users_email_nocase(conn: sqlite3.Connection) -> None:
+    """Schema v3: rebuild a pre-v3 users table so email compares case-insensitively.
+
+    The app layer already lowercases before insert and lookup; NOCASE makes the
+    UNIQUE constraint enforce that at the DB level too (defense in depth).
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
+    ).fetchone()
+    if row is None or "NOCASE" in (row["sql"] or "").upper():
+        return
+
+    try:
+        conn.executescript(f"""
+            CREATE TABLE users_v3{_USERS_TABLE_BODY};
+            INSERT INTO users_v3 ({_USERS_COLUMNS})
+                SELECT {_USERS_COLUMNS} FROM users;
+            DROP TABLE users;
+            ALTER TABLE users_v3 RENAME TO users;
+        """)
+        conn.commit()
+    except sqlite3.IntegrityError as exc:
+        conn.rollback()
+        conn.execute("DROP TABLE IF EXISTS users_v3")
+        conn.commit()
+        raise RuntimeError(
+            "Cannot apply case-insensitive email uniqueness: the users table already "
+            "contains emails that differ only by case. Resolve the duplicates manually, "
+            "then restart."
+        ) from exc
 
 
 def _drop_conversation_tables(conn: sqlite3.Connection) -> None:
@@ -284,3 +325,55 @@ def get_session_summary(conversation_id: int) -> dict | None:
     session["mistake_types"] = [dict(m) for m in mistakes]
     conn.close()
     return session
+
+
+def create_user(email: str, password_hash: str, display_name: str) -> int:
+    """Insert a user account. Returns the new user id."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            """
+            INSERT INTO users (email, password_hash, display_name, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (email, password_hash, display_name, now),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def get_user_by_email(email: str) -> dict | None:
+    """Look up a user by email. Includes password_hash for credential checks. None if not found."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT id, email, password_hash, display_name, created_at
+            FROM users
+            WHERE email = ?
+            """,
+            (email,),
+        ).fetchone()
+    finally:
+        conn.close()
+    return dict(row) if row else None
+
+
+def get_user_by_id(user_id: int) -> dict | None:
+    """Look up a user by id. Excludes password_hash — profile fields only. None if not found."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT id, email, display_name, created_at
+            FROM users
+            WHERE id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    return dict(row) if row else None
