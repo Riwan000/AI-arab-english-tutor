@@ -1,4 +1,6 @@
 import sqlite3
+import time
+from statistics import mean
 
 import jwt
 import pytest
@@ -347,6 +349,57 @@ def test_login_rejects_wrong_password_and_unknown_email_identically(client):
     assert wrong_password.status_code == 401
     assert unknown_email.status_code == 401
     assert wrong_password.json() == unknown_email.json()
+
+
+# Samples per path. Each login pays ~100ms of bcrypt, and the daily (ip, email)
+# cap is 20 attempts, so this stays well inside both the runtime and the budget.
+LOGIN_TIMING_SAMPLES = 6
+
+# Generous enough that ordinary scheduler noise cannot fail the test, tight
+# enough that a skipped bcrypt call (which is ~1000x faster) always does.
+LOGIN_TIMING_RATIO_MIN = 0.5
+LOGIN_TIMING_RATIO_MAX = 2.0
+
+
+def test_login_takes_similar_time_for_known_and_unknown_emails(client):
+    """A nonexistent email must cost the same bcrypt work as a wrong password (issue #103).
+
+    login() verifies against DUMMY_HASH when there is no user row, so both paths
+    pay bcrypt's full cost. Short-circuiting the missing-row case ("no row → 401
+    immediately") would make the unknown-email path orders of magnitude faster
+    and leak account existence through response time.
+    """
+    client.post("/api/v1/auth/signup", json=SIGNUP_BODY)
+
+    known_email_body = {"email": SIGNUP_BODY["email"], "password": "not the password"}
+    unknown_email_body = {"email": "nobody@example.com", "password": "not the password"}
+
+    def timed_login(body: dict) -> float:
+        started = time.perf_counter()
+        response = client.post("/api/v1/auth/login", json=body)
+        elapsed = time.perf_counter() - started
+        assert response.status_code == 401
+        return elapsed
+
+    # One warm-up per path keeps first-call import and connection costs out of
+    # the samples.
+    timed_login(known_email_body)
+    timed_login(unknown_email_body)
+
+    # Interleaved so any machine-wide slowdown mid-run hits both samples equally.
+    known_times: list[float] = []
+    unknown_times: list[float] = []
+    for _ in range(LOGIN_TIMING_SAMPLES):
+        known_times.append(timed_login(known_email_body))
+        unknown_times.append(timed_login(unknown_email_body))
+
+    ratio = mean(unknown_times) / mean(known_times)
+
+    assert LOGIN_TIMING_RATIO_MIN <= ratio <= LOGIN_TIMING_RATIO_MAX, (
+        f"unknown-email login averaged {mean(unknown_times):.4f}s vs "
+        f"{mean(known_times):.4f}s for a known email (ratio {ratio:.3f}) — "
+        "the constant-time DUMMY_HASH path may have been bypassed"
+    )
 
 
 def test_record_auth_attempt_increments_per_ip_and_email(tmp_path, monkeypatch):

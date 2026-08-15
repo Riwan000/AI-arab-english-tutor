@@ -262,3 +262,64 @@ def test_conversation_schema_bump_recreates_conversation_tables_and_keeps_users(
     assert user is not None
     assert version["version"] == db.SCHEMA_VERSION
 
+
+def test_future_schema_version_bump_remigrates_conversations_but_keeps_account_data(
+        tmp_path, monkeypatch):
+    """Account data survives the next SCHEMA_VERSION bump (issue #105).
+
+    Everything created inside `_ensure_accounts_schema()` is additive and is
+    never touched by the destructive conversation migration — that includes the
+    daily_usage table once issue #125 adds it there alongside users and
+    auth_attempts, so it will inherit this same guarantee without extra work.
+    """
+    db_path = tmp_path / "test.db"
+
+    monkeypatch.setattr(db, "DB_PATH", db_path)
+
+    conn = db.get_connection()
+    conn.execute(
+        """
+        INSERT INTO users (email, password_hash, display_name, created_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        ("future@example.com", "hashed_password", "Future User", "2023-01-01 00:00:00"),
+    )
+    conn.execute(
+        """
+        INSERT INTO conversations (lesson_id, lesson_title, created_at, ended_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        ("present_simple", "Present Simple", "2023-01-01 00:00:00", "2023-01-01 00:30:00"),
+    )
+    conn.commit()
+    conn.close()
+
+    assert db.record_auth_attempt("1.2.3.4", "future@example.com") == 1
+
+    # Simulate the next release bumping the conversation schema version.
+    bumped_version = db.SCHEMA_VERSION + 1
+    monkeypatch.setattr(db, "SCHEMA_VERSION", bumped_version)
+
+    conn = db.get_connection()
+
+    version = conn.execute("SELECT version FROM schema_version").fetchone()
+    conversation_count = conn.execute("SELECT COUNT(*) AS n FROM conversations").fetchone()
+    user = conn.execute("SELECT * FROM users WHERE email=?", ("future@example.com",)).fetchone()
+    attempt = conn.execute(
+        "SELECT count FROM auth_attempts WHERE ip=? AND email=?",
+        ("1.2.3.4", "future@example.com"),
+    ).fetchone()
+
+    conn.close()
+
+    # Conversation tables were dropped and recreated at the new version...
+    assert version["version"] == bumped_version
+    assert conversation_count["n"] == 0
+
+    # ...while the account tables kept every row.
+    assert user is not None
+    assert user["display_name"] == "Future User"
+    assert user["password_hash"] == "hashed_password"
+    assert attempt["count"] == 1
+    assert db.record_auth_attempt("1.2.3.4", "future@example.com") == 2
+
