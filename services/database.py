@@ -86,6 +86,17 @@ _AUTH_ATTEMPTS_TABLE_BODY = """(
         )"""
 
 
+_DAILY_USAGE_TABLE_BODY = """(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            usage_date TEXT NOT NULL,
+            message_count INTEGER NOT NULL DEFAULT 0,
+            voice_call_count INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            UNIQUE (user_id, usage_date)
+        )"""
+
+
 def _ensure_accounts_schema(conn: sqlite3.Connection) -> None:
     """Create the accounts tables if absent, then apply additive account migrations.
 
@@ -94,6 +105,7 @@ def _ensure_accounts_schema(conn: sqlite3.Connection) -> None:
     """
     conn.execute(f"CREATE TABLE IF NOT EXISTS users{_USERS_TABLE_BODY};")
     conn.execute(f"CREATE TABLE IF NOT EXISTS auth_attempts{_AUTH_ATTEMPTS_TABLE_BODY};")
+    conn.execute(f"CREATE TABLE IF NOT EXISTS daily_usage{_DAILY_USAGE_TABLE_BODY};")
     _migrate_users_email_nocase(conn)
 
 

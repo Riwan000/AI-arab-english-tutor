@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     retention_days: int = 5
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+    daily_message_limit: int = 20
+    daily_voice_call_limit: int = 20
 
     @field_validator("cors_origins", mode="before")
     @classmethod
