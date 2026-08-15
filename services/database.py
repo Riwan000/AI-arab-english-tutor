@@ -32,6 +32,8 @@ def _init_schema(conn: sqlite3.Connection) -> None:
         conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
         conn.commit()
 
+    _migrate_conversations_ownership_and_mode(conn)
+
 
 def _needs_conversation_migration(conn: sqlite3.Connection) -> bool:
     if not _table_exists(conn, "conversations"):
@@ -127,6 +129,76 @@ def _migrate_users_email_nocase(conn: sqlite3.Connection) -> None:
         ) from exc
 
 
+def _migrate_conversations_ownership_and_mode(conn: sqlite3.Connection) -> None:
+    """Additive-only: adds user_id/difficulty/mode to conversations and makes
+    lesson_id/lesson_title nullable (Free Talk sessions have no lesson).
+
+    Runs on every connection like `_ensure_accounts_schema`. Rebuilds the table
+    to relax the NOT NULL constraints (SQLite can't ALTER that away directly),
+    but always copies existing rows forward — unlike the destructive
+    drop/recreate path `_needs_conversation_migration` drives for unrelated
+    schema bumps, this never loses conversation history.
+    """
+    if not _table_exists(conn, "conversations"):
+        return
+
+    columns = {
+        row["name"] for row in conn.execute("PRAGMA table_info(conversations)").fetchall()
+    }
+    if {"user_id", "difficulty", "mode"}.issubset(columns):
+        return
+
+    # SQLite treats DROP TABLE on an FK parent as an implicit `DELETE FROM` for
+    # the purpose of firing ON DELETE actions — with foreign_keys left ON, the
+    # DROP TABLE below would cascade-delete every row in `messages` and
+    # `grammar_feedback`. Disable enforcement for this rebuild only; the
+    # `conversations` table itself isn't touched by DML here, just recreated
+    # under the same name, so no orphaned rows are produced.
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        try:
+            conn.executescript("""
+                CREATE TABLE conversations_v3 (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER REFERENCES users(id),
+                    lesson_id TEXT,
+                    lesson_title TEXT,
+                    difficulty TEXT,
+                    mode TEXT DEFAULT 'lesson',
+                    created_at TEXT NOT NULL,
+                    ended_at TEXT NOT NULL,
+                    grammar_score INTEGER,
+                    exchange_count INTEGER,
+                    mistake_count INTEGER,
+                    vocabulary TEXT,
+                    recommendation TEXT,
+                    model_used TEXT
+                );
+
+                INSERT INTO conversations_v3 (
+                    id, lesson_id, lesson_title, created_at, ended_at,
+                    grammar_score, exchange_count, mistake_count, vocabulary,
+                    recommendation, model_used
+                )
+                SELECT id, lesson_id, lesson_title, created_at, ended_at,
+                       grammar_score, exchange_count, mistake_count, vocabulary,
+                       recommendation, model_used
+                FROM conversations;
+
+                DROP TABLE conversations;
+                ALTER TABLE conversations_v3 RENAME TO conversations;
+                CREATE INDEX IF NOT EXISTS idx_conversations_ended_at ON conversations(ended_at);
+            """)
+            conn.commit()
+        except sqlite3.DatabaseError:
+            conn.rollback()
+            conn.execute("DROP TABLE IF EXISTS conversations_v3")
+            conn.commit()
+            raise
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+
+
 def _drop_conversation_tables(conn: sqlite3.Connection) -> None:
     conn.executescript("""
         DROP TABLE IF EXISTS grammar_feedback;
@@ -139,8 +211,11 @@ def _create_tables(conn: sqlite3.Connection) -> None:
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS conversations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            lesson_id TEXT NOT NULL,
-            lesson_title TEXT NOT NULL,
+            user_id INTEGER REFERENCES users(id),
+            lesson_id TEXT,
+            lesson_title TEXT,
+            difficulty TEXT,
+            mode TEXT DEFAULT 'lesson',
             created_at TEXT NOT NULL,
             ended_at TEXT NOT NULL,
             grammar_score INTEGER,

@@ -9,12 +9,15 @@ from repositories.session_repo import SessionRepository
 from services import grammar, lessons, openrouter, scoring
 
 
-def start_conversation(lesson_id: str) -> ChatResponse:
-    """Load lesson, build start prompt, call LLM, return clean reply."""
-    lesson = lessons.get_lesson(lesson_id)
-    lesson_dict = lesson.model_dump()
+def start_conversation(
+    lesson_id: str | None,
+    difficulty: str = "beginner",
+    mode: str = "lesson",
+) -> ChatResponse:
+    """Build start prompt, call LLM, return clean reply. Loads a lesson only in lesson mode."""
+    lesson_dict = _resolve_lesson(lesson_id, mode)
 
-    messages = build_messages(lesson_dict, [], start=True)
+    messages = build_messages(lesson_dict, [], start=True, difficulty=difficulty, mode=mode)
     raw = openrouter.chat_completion(messages)
     corrections = grammar.extract_feedback(raw)
     reply = grammar.strip_json_from_response(raw)
@@ -23,21 +26,30 @@ def start_conversation(lesson_id: str) -> ChatResponse:
 
 
 def send_message(
-    lesson_id: str,
+    lesson_id: str | None,
     messages: list[dict],
     user_text: str,
+    difficulty: str = "beginner",
+    mode: str = "lesson",
 ) -> ChatResponse:
     """Append user message, call LLM, parse corrections, return clean reply."""
-    lesson = lessons.get_lesson(lesson_id)
-    lesson_dict = lesson.model_dump()
+    lesson_dict = _resolve_lesson(lesson_id, mode)
 
     history = [*messages, {"role": "user", "content": user_text}]
-    prompt_messages = build_messages(lesson_dict, history)
+    prompt_messages = build_messages(lesson_dict, history, difficulty=difficulty, mode=mode)
     raw = openrouter.chat_completion(prompt_messages)
     corrections = grammar.extract_feedback(raw)
     reply = grammar.strip_json_from_response(raw)
 
     return ChatResponse(reply=reply, corrections=corrections)
+
+
+def _resolve_lesson(lesson_id: str | None, mode: str) -> dict | None:
+    """Look up the lesson in lesson mode only — Free Talk has no lesson to resolve."""
+    if mode != "lesson":
+        return None
+    lesson = lessons.get_lesson(lesson_id)
+    return lesson.model_dump()
 
 
 def end_session(
