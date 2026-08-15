@@ -298,6 +298,7 @@ def save_session(
     summary: dict,
     model_used: str | None = None,
     user_id: int | None = None,
+    mode: str = "lesson",
 ) -> int | None:
     """Persist a completed session. Returns conversation id or None if nothing to save."""
     if not messages:
@@ -312,15 +313,16 @@ def save_session(
         cursor = conn.execute(
             """
             INSERT INTO conversations (
-                user_id, lesson_id, lesson_title, created_at, ended_at,
+                user_id, lesson_id, lesson_title, mode, created_at, ended_at,
                 grammar_score, exchange_count, mistake_count,
                 vocabulary, recommendation, model_used
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 user_id,
                 lesson["id"],
                 lesson["title"],
+                mode,
                 created_at,
                 now,
                 summary.get("grammar"),
@@ -390,27 +392,40 @@ def save_session(
         conn.close()
 
 
-def list_past_sessions(limit: int = 20) -> list[dict]:
+def list_past_sessions(limit: int = 20, *, user_id: int) -> list[dict]:
+    """List the caller's own sessions, newest first.
+
+    `user_id` is keyword-only and required so ownership filtering can never be
+    skipped — or accidentally satisfied by a positional `limit`. Rows with a
+    NULL `user_id` (saved before ownership existed) belong to nobody and are
+    never returned.
+    """
     conn = get_connection()
     rows = conn.execute(
         """
         SELECT id, lesson_id, lesson_title, ended_at,
                grammar_score, exchange_count, mistake_count, recommendation
         FROM conversations
+        WHERE user_id = ?
         ORDER BY ended_at DESC
         LIMIT ?
         """,
-        (limit,),
+        (user_id, limit),
     ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
 
-def get_session_summary(conversation_id: int) -> dict | None:
+def get_session_summary(conversation_id: int, *, user_id: int) -> dict | None:
+    """Fetch one session owned by `user_id`. None if it does not exist or is not theirs.
+
+    Both cases return None on purpose: callers must not be able to tell an
+    id that exists from one that belongs to another user.
+    """
     conn = get_connection()
     row = conn.execute(
-        "SELECT * FROM conversations WHERE id = ?",
-        (conversation_id,),
+        "SELECT * FROM conversations WHERE id = ? AND user_id = ?",
+        (conversation_id, user_id),
     ).fetchone()
     if not row:
         conn.close()

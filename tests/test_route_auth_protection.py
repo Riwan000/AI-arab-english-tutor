@@ -1,13 +1,18 @@
-"""Chat and session routes must require auth; lessons/health must stay public."""
+"""Chat and session routes must require auth and scope session data to the caller.
+
+Lessons/health must stay public.
+"""
 
 import os
 
 import pytest
 from fastapi.testclient import TestClient
 
-os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret")
+SECRET = "test-only-secret"
+os.environ.setdefault("JWT_SECRET_KEY", SECRET)
 
 from api.main import app  # noqa: E402 (secret must be set before import)
+from services import database as db  # noqa: E402
 
 client = TestClient(app)
 
@@ -65,3 +70,118 @@ def test_protected_route_rejects_malformed_auth_header(method, path, json_body):
 def test_public_route_does_not_require_auth(path):
     response = client.get(path)
     assert response.status_code != 401
+
+
+# --- session ownership (IDOR regression, issues #117/#118) --------------------
+
+
+@pytest.fixture
+def scoped_client(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "sessions.db")
+    monkeypatch.setenv("JWT_SECRET_KEY", SECRET)
+
+    from api.config import get_settings
+
+    get_settings.cache_clear()
+
+    from api.rate_limit import limiter
+
+    # Signing up two users per test would otherwise share one limiter bucket
+    # keyed on the same TestClient IP; rate limiting has its own tests.
+    monkeypatch.setattr(limiter, "enabled", False)
+
+    # Deliberately not a context manager: the lifespan would repoint
+    # database.DB_PATH at the real database file.
+    yield TestClient(app)
+
+    get_settings.cache_clear()
+
+
+def _signup(scoped_client, email: str) -> tuple[dict, int]:
+    """Register a user; return (auth headers, user id)."""
+    response = scoped_client.post(
+        "/api/v1/auth/signup",
+        json={
+            "email": email,
+            "password": "correct horse battery staple",
+            "display_name": "Test User",
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    return {"Authorization": f"Bearer {body['access_token']}"}, body["user"]["id"]
+
+
+def _save_session_for(user_id: int) -> int:
+    return db.save_session(
+        lesson={"id": "present_simple", "title": "Present Simple"},
+        messages=[{"role": "user", "content": "hi"}],
+        mistakes=[],
+        summary={"grammar": 90, "exchanges": 1, "mistake_count": 0},
+        user_id=user_id,
+    )
+
+
+def test_list_sessions_hides_another_users_sessions(scoped_client):
+    owner_headers, owner_id = _signup(scoped_client, "owner@example.com")
+    intruder_headers, _ = _signup(scoped_client, "intruder@example.com")
+    session_id = _save_session_for(owner_id)
+
+    owner_view = scoped_client.get("/api/v1/sessions", headers=owner_headers)
+    intruder_view = scoped_client.get("/api/v1/sessions", headers=intruder_headers)
+
+    assert [item["id"] for item in owner_view.json()["sessions"]] == [session_id]
+    assert intruder_view.json()["sessions"] == []
+
+
+def test_get_session_returns_404_for_another_users_session(scoped_client):
+    owner_headers, owner_id = _signup(scoped_client, "owner@example.com")
+    intruder_headers, _ = _signup(scoped_client, "intruder@example.com")
+    session_id = _save_session_for(owner_id)
+
+    owner_view = scoped_client.get(
+        f"/api/v1/sessions/{session_id}", headers=owner_headers
+    )
+    intruder_view = scoped_client.get(
+        f"/api/v1/sessions/{session_id}", headers=intruder_headers
+    )
+
+    assert owner_view.status_code == 200
+    assert intruder_view.status_code == 404
+
+
+def test_get_session_404s_identically_for_foreign_and_unknown_ids(scoped_client):
+    """A distinguishable response would confirm which session ids exist."""
+    _, owner_id = _signup(scoped_client, "owner@example.com")
+    intruder_headers, _ = _signup(scoped_client, "intruder@example.com")
+    session_id = _save_session_for(owner_id)
+
+    foreign = scoped_client.get(
+        f"/api/v1/sessions/{session_id}", headers=intruder_headers
+    )
+    unknown = scoped_client.get("/api/v1/sessions/999999", headers=intruder_headers)
+
+    assert foreign.status_code == unknown.status_code == 404
+    assert foreign.json() == unknown.json()
+
+
+def test_create_session_stores_the_authenticated_owner(scoped_client):
+    owner_headers, owner_id = _signup(scoped_client, "owner@example.com")
+
+    response = scoped_client.post(
+        "/api/v1/sessions",
+        headers=owner_headers,
+        json={
+            "lesson_id": "present_simple",
+            "messages": [{"role": "user", "content": "hello"}],
+        },
+    )
+
+    assert response.status_code == 201
+    session_id = response.json()["id"]
+    conn = db.get_connection()
+    row = conn.execute(
+        "SELECT user_id FROM conversations WHERE id = ?", (session_id,)
+    ).fetchone()
+    conn.close()
+    assert row["user_id"] == owner_id

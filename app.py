@@ -7,6 +7,7 @@ import api_client
 from components.auth_view import render_auth_view
 from components.chat import render_chat
 from components.lesson_view import render_lesson_view
+from components.mode_picker import render_mode_picker
 from components.sidebar import render_sidebar
 from components.summary import render_summary
 
@@ -23,6 +24,8 @@ def init_session_state() -> None:
         "session_persisted": False,
         "saved_conversation_id": None,
         "user": None,
+        "mode": None,
+        "difficulty": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -69,7 +72,9 @@ def main() -> None:
 
     render_sidebar()
 
-    if st.session_state.session_ended:
+    if st.session_state.mode is None or st.session_state.difficulty is None:
+        render_mode_picker()
+    elif st.session_state.session_ended:
         render_summary()
     elif st.session_state.conversation_started:
         render_chat()

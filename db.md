@@ -253,9 +253,11 @@ Mistakes carry `message_index` pointing to the user message sequence index:
 
 ## 6.1 Past sessions list
 
-**Function:** `list_past_sessions(limit=20)`  
+**Function:** `list_past_sessions(limit=20, *, user_id)`  
 **Used by:** `components/sidebar.py` → `render_past_sessions()`  
-**Returns:** Latest sessions ordered by `ended_at DESC`
+**Returns:** Latest sessions owned by `user_id`, ordered by `ended_at DESC`  
+**Ownership:** `user_id` is required and keyword-only — the query filters on
+`WHERE user_id = ?`, so no call site can return another user's sessions.
 
 ```python
 {
@@ -272,9 +274,12 @@ Mistakes carry `message_index` pointing to the user message sequence index:
 
 ## 6.2 Session detail
 
-**Function:** `get_session_summary(conversation_id)`  
+**Function:** `get_session_summary(conversation_id, *, user_id)`  
 **Used by:** Sidebar expander for each past session  
-**Returns:** Full conversation summary + aggregated mistake types
+**Returns:** Full conversation summary + aggregated mistake types, or `None`  
+**Ownership:** Matches on `WHERE id = ? AND user_id = ?`. A session belonging to
+another user and a nonexistent id both return `None`, so callers cannot tell
+which session ids exist.
 
 ```python
 {

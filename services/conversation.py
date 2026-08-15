@@ -82,6 +82,7 @@ def end_session(
         summary=summary,
         model_used=os.getenv("DEFAULT_MODEL", openrouter.DEFAULT_MODEL),
         user_id=user_id,
+        mode=mode,
     )
 
     if conversation_id is None:

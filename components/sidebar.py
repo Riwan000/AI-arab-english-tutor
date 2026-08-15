@@ -5,6 +5,7 @@ from datetime import datetime
 import streamlit as st
 
 import api_client
+from components.mode_picker import DIFFICULTY_LABELS, MODE_LABELS
 
 
 def _format_date(iso_timestamp: str) -> str:
@@ -47,23 +48,32 @@ def render_sidebar() -> None:
     with st.sidebar:
         st.title("📚 English Tutor")
 
-        summaries = api_client.list_lessons()
-        if not summaries:
-            st.warning("No lessons available. Check backend connection.")
-            return
+        mode = st.session_state.get("mode")
+        difficulty = st.session_state.get("difficulty")
+        if mode and difficulty:
+            st.caption(
+                f"Mode: {MODE_LABELS.get(mode, mode)} · "
+                f"Difficulty: {DIFFICULTY_LABELS.get(difficulty, difficulty)}"
+            )
 
-        lesson_titles = {summary["title"]: summary["id"] for summary in summaries}
+        if mode == "lesson":
+            summaries = api_client.list_lessons()
+            if not summaries:
+                st.warning("No lessons available. Check backend connection.")
+                return
 
-        selected_title = st.selectbox(
-            "Choose a lesson",
-            options=list(lesson_titles.keys()),
-            index=0,
-        )
+            lesson_titles = {summary["title"]: summary["id"] for summary in summaries}
 
-        if selected_title:
-            lesson = api_client.get_lesson(lesson_titles[selected_title])
-            if lesson:
-                st.session_state.lesson = lesson
+            selected_title = st.selectbox(
+                "Choose a lesson",
+                options=list(lesson_titles.keys()),
+                index=0,
+            )
+
+            if selected_title:
+                lesson = api_client.get_lesson(lesson_titles[selected_title])
+                if lesson:
+                    st.session_state.lesson = lesson
 
         st.divider()
         st.subheader("Progress")

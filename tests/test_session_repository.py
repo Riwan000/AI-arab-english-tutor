@@ -1,3 +1,5 @@
+import pytest
+
 from repositories.session_repo import SessionRepository
 from services import database as db
 
@@ -83,3 +85,130 @@ def test_save_session_defaults_user_id_to_null(tmp_path, monkeypatch):
     assert row["user_id"] is None
     assert row["lesson_id"] is None
     assert row["lesson_title"] == "Free Talk"
+
+
+def test_save_forwards_mode_to_database_layer(monkeypatch):
+    captured = {}
+
+    def fake_save_session(**kwargs):
+        captured.update(kwargs)
+        return 7
+
+    monkeypatch.setattr(db, "save_session", fake_save_session)
+
+    SessionRepository().save(
+        lesson={"id": None, "title": "Free Talk"},
+        messages=[{"role": "user", "content": "hi"}],
+        mistakes=[],
+        summary={"grammar": 90, "exchanges": 1, "mistake_count": 0},
+        mode="free_talk",
+    )
+
+    assert captured["mode"] == "free_talk"
+
+
+def test_save_session_persists_mode_on_the_conversation_row(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+
+    conversation_id = db.save_session(
+        lesson={"id": None, "title": "Free Talk"},
+        messages=[{"role": "user", "content": "hi"}],
+        mistakes=[],
+        summary={"grammar": 90, "exchanges": 1, "mistake_count": 0},
+        mode="free_talk",
+    )
+
+    conn = db.get_connection()
+    row = conn.execute(
+        "SELECT mode FROM conversations WHERE id = ?", (conversation_id,)
+    ).fetchone()
+    conn.close()
+
+    assert row["mode"] == "free_talk"
+
+
+def test_save_session_defaults_mode_to_lesson(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+
+    conversation_id = db.save_session(
+        lesson={"id": "present_simple", "title": "Present Simple"},
+        messages=[{"role": "user", "content": "hi"}],
+        mistakes=[],
+        summary={"grammar": 90, "exchanges": 1, "mistake_count": 0},
+    )
+
+    conn = db.get_connection()
+    row = conn.execute(
+        "SELECT mode FROM conversations WHERE id = ?", (conversation_id,)
+    ).fetchone()
+    conn.close()
+
+    assert row["mode"] == "lesson"
+
+
+# --- ownership filtering on the read paths (IDOR regression, issue #117) ------
+
+
+def _save_session_for(user_id: int | None) -> int:
+    return db.save_session(
+        lesson={"id": "present_simple", "title": "Present Simple"},
+        messages=[{"role": "user", "content": "hi"}],
+        mistakes=[],
+        summary={"grammar": 90, "exchanges": 1, "mistake_count": 0},
+        user_id=user_id,
+    )
+
+
+@pytest.fixture
+def two_users(tmp_path, monkeypatch):
+    """Owner and intruder ids in a throwaway database, plus a repository."""
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    owner = db.create_user("owner@example.com", "hash", "Owner")
+    intruder = db.create_user("intruder@example.com", "hash", "Intruder")
+    return SessionRepository(), owner, intruder
+
+
+def test_list_recent_returns_only_the_callers_own_sessions(two_users):
+    repo, owner, intruder = two_users
+    session_id = _save_session_for(owner)
+
+    assert [row["id"] for row in repo.list_recent(user_id=owner)] == [session_id]
+    assert repo.list_recent(user_id=intruder) == []
+
+
+def test_list_recent_omits_sessions_with_no_owner(two_users):
+    repo, owner, _ = two_users
+    _save_session_for(None)
+
+    assert repo.list_recent(user_id=owner) == []
+
+
+def test_get_summary_returns_the_session_for_its_owner(two_users):
+    repo, owner, _ = two_users
+    session_id = _save_session_for(owner)
+
+    assert repo.get_summary(session_id, user_id=owner)["id"] == session_id
+
+
+def test_get_summary_returns_none_for_another_users_session(two_users):
+    repo, owner, intruder = two_users
+    session_id = _save_session_for(owner)
+
+    assert repo.get_summary(session_id, user_id=intruder) is None
+
+
+def test_get_summary_treats_a_foreign_session_like_a_missing_one(two_users):
+    """Both must be indistinguishable, or ids of other users' sessions leak."""
+    repo, owner, intruder = two_users
+    session_id = _save_session_for(owner)
+
+    assert repo.get_summary(session_id, user_id=intruder) == repo.get_summary(
+        999999, user_id=intruder
+    )
+
+
+def test_get_summary_returns_none_for_a_session_with_no_owner(two_users):
+    repo, owner, _ = two_users
+    session_id = _save_session_for(None)
+
+    assert repo.get_summary(session_id, user_id=owner) is None

@@ -1,5 +1,7 @@
 """Session API schemas."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from models.conversation import Message, SessionDetail, SessionListItem, SessionSummary
@@ -8,6 +10,7 @@ from models.feedback import GrammarFeedback
 
 class SessionCreateRequest(BaseModel):
     lesson_id: str | None = Field(default=None, min_length=1)
+    mode: Literal["lesson", "free_talk"] = "lesson"
     messages: list[Message] = Field(min_length=1)
     mistakes: list[GrammarFeedback] = Field(default_factory=list)
 

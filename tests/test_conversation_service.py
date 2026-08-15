@@ -134,3 +134,33 @@ def test_end_session_defaults_user_id_to_none(monkeypatch):
     conversation.end_session("present_simple", messages, [])
 
     assert captured["user_id"] is None
+
+
+def test_end_session_threads_mode_to_repository_save(monkeypatch):
+    captured = {}
+
+    def fake_save(self, **kwargs):
+        captured.update(kwargs)
+        return 1
+
+    monkeypatch.setattr(SessionRepository, "save", fake_save)
+
+    messages = [{"role": "user", "content": "hi"}]
+    conversation.end_session(None, messages, [], mode="free_talk")
+
+    assert captured["mode"] == "free_talk"
+
+
+def test_end_session_defaults_mode_to_lesson(monkeypatch):
+    captured = {}
+
+    def fake_save(self, **kwargs):
+        captured.update(kwargs)
+        return 1
+
+    monkeypatch.setattr(SessionRepository, "save", fake_save)
+
+    messages = [{"role": "user", "content": "hi"}]
+    conversation.end_session("present_simple", messages, [])
+
+    assert captured["mode"] == "lesson"

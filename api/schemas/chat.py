@@ -1,5 +1,7 @@
 """Chat API schemas."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 from models.conversation import ChatResponse, Message
@@ -7,11 +9,15 @@ from models.feedback import GrammarFeedback
 
 
 class ChatStartRequest(BaseModel):
-    lesson_id: str = Field(min_length=1)
+    lesson_id: str | None = Field(default=None, min_length=1)
+    difficulty: Literal["beginner", "intermediate", "advanced"] = "beginner"
+    mode: Literal["lesson", "free_talk"] = "lesson"
 
 
 class ChatMessageRequest(BaseModel):
-    lesson_id: str = Field(min_length=1)
+    lesson_id: str | None = Field(default=None, min_length=1)
+    difficulty: Literal["beginner", "intermediate", "advanced"] = "beginner"
+    mode: Literal["lesson", "free_talk"] = "lesson"
     messages: list[Message] = Field(min_length=1)
 
     @field_validator("messages")

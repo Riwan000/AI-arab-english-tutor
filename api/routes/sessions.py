@@ -20,7 +20,9 @@ def create_session(
 ) -> SessionSummary:
     messages = [msg.model_dump(exclude_none=True) for msg in body.messages]
     mistakes = body.mistakes
-    result = conversation.end_session(body.lesson_id, messages, mistakes)
+    result = conversation.end_session(
+        body.lesson_id, messages, mistakes, mode=body.mode, user_id=current_user.id
+    )
     if result is None:
         raise EmptySessionError()
     return result
@@ -32,7 +34,7 @@ def list_sessions(
     repo: SessionRepository = Depends(get_session_repository),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    rows = repo.list_recent(limit=limit)
+    rows = repo.list_recent(limit=limit, user_id=current_user.id)
     items = [
         SessionListItem(
             id=row["id"],
@@ -55,7 +57,9 @@ def get_session(
     repo: SessionRepository = Depends(get_session_repository),
     current_user: User = Depends(get_current_user),
 ) -> SessionDetail:
-    row = repo.get_summary(session_id)
+    # get_summary filters by owner, so another user's session and a nonexistent
+    # id both land here and raise the same 404 — nothing distinguishes them.
+    row = repo.get_summary(session_id, user_id=current_user.id)
     if row is None:
         raise SessionNotFoundError()
 

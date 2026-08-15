@@ -10,11 +10,11 @@ from components.correction_card import render_correction_card
 
 def render_chat() -> None:
     lesson = st.session_state.get("lesson")
-    if not lesson:
+    if st.session_state.mode == "lesson" and not lesson:
         st.warning("Please select a lesson from the sidebar.")
         return
 
-    st.header(f"Practice: {lesson['title']}")
+    st.header(f"Practice: {lesson['title']}" if lesson else "Practice: Free Talk")
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
@@ -29,15 +29,19 @@ def render_chat() -> None:
         _handle_user_message(prompt, lesson)
 
 
-def _message_metadata(lesson: dict) -> dict:
+def _message_metadata(lesson: dict | None) -> dict:
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "lesson_id": lesson["id"],
+        "lesson_id": lesson["id"] if lesson else None,
     }
 
 
-def _start_conversation(lesson: dict) -> None:
-    result = api_client.start_chat(lesson["id"])
+def _start_conversation(lesson: dict | None) -> None:
+    result = api_client.start_chat(
+        lesson_id=lesson["id"] if lesson else None,
+        difficulty=st.session_state.get("difficulty") or "beginner",
+        mode=st.session_state.get("mode") or "lesson",
+    )
     if not result.get("reply"):
         return
 
@@ -51,7 +55,7 @@ def _start_conversation(lesson: dict) -> None:
     st.rerun()
 
 
-def _handle_user_message(user_text: str, lesson: dict) -> None:
+def _handle_user_message(user_text: str, lesson: dict | None) -> None:
     st.session_state.messages.append({
         "role": "user",
         "content": user_text,
@@ -60,9 +64,11 @@ def _handle_user_message(user_text: str, lesson: dict) -> None:
     user_message_index = len(st.session_state.messages) - 1
 
     result = api_client.send_message(
-        lesson_id=lesson["id"],
+        lesson_id=lesson["id"] if lesson else None,
         messages=st.session_state.messages[:-1],
         user_text=user_text,
+        difficulty=st.session_state.get("difficulty") or "beginner",
+        mode=st.session_state.get("mode") or "lesson",
     )
     if not result.get("reply"):
         st.session_state.messages.pop()

@@ -171,10 +171,10 @@ def get_lesson(lesson_id: str) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def start_chat(lesson_id: str) -> dict:
+def start_chat(lesson_id: str | None, difficulty: str = "beginner", mode: str = "lesson") -> dict:
     data = _request_post(
         "/api/v1/chat/start",
-        json={"lesson_id": lesson_id},
+        json={"lesson_id": lesson_id, "difficulty": difficulty, "mode": mode},
         timeout=CHAT_TIMEOUT,
         fallback={"reply": "", "corrections": []},
         timeout_message=CHAT_TIMEOUT_MESSAGE,
@@ -182,9 +182,17 @@ def start_chat(lesson_id: str) -> dict:
     return data if isinstance(data, dict) else {"reply": "", "corrections": []}
 
 
-def send_message(lesson_id: str, messages: list, user_text: str) -> dict:
+def send_message(
+    lesson_id: str | None,
+    messages: list,
+    user_text: str,
+    difficulty: str = "beginner",
+    mode: str = "lesson",
+) -> dict:
     payload = {
         "lesson_id": lesson_id,
+        "difficulty": difficulty,
+        "mode": mode,
         "messages": [_serialize_message(m) for m in messages]
         + [{"role": "user", "content": user_text}],
     }
@@ -198,11 +206,17 @@ def send_message(lesson_id: str, messages: list, user_text: str) -> dict:
     return data if isinstance(data, dict) else {"reply": "", "corrections": []}
 
 
-def save_session(lesson_id: str, messages: list, mistakes: list) -> dict | None:
+def save_session(
+    lesson_id: str | None,
+    messages: list,
+    mistakes: list,
+    mode: str = "lesson",
+) -> dict | None:
     data = _request_post(
         "/api/v1/sessions",
         json={
             "lesson_id": lesson_id,
+            "mode": mode,
             "messages": [_serialize_message(m) for m in messages],
             "mistakes": [_serialize_mistake(m) for m in mistakes],
         },

@@ -74,13 +74,14 @@ def persist_session() -> int | None:
 
     lesson = st.session_state.get("lesson")
     messages = st.session_state.get("messages", [])
-    if not lesson or not messages:
+    if not messages:
         return None
 
     result = api_client.save_session(
-        lesson_id=lesson["id"],
+        lesson_id=lesson["id"] if lesson else None,
         messages=messages,
         mistakes=st.session_state.mistakes,
+        mode=st.session_state.get("mode", "lesson"),
     )
 
     if result and result.get("id"):
@@ -141,7 +142,12 @@ def render_summary() -> None:
         st.write("No mistakes — great job!")
 
     st.subheader("Recommendation")
-    lesson_title = st.session_state.lesson["title"] if st.session_state.lesson else "this lesson"
+    if st.session_state.lesson:
+        lesson_title = st.session_state.lesson["title"]
+    elif st.session_state.get("mode") == "free_talk":
+        lesson_title = "Free Talk"
+    else:
+        lesson_title = "this lesson"
     st.info(summary.get("recommendation") or f"Practice {lesson_title} again tomorrow.")
 
     if st.button("Start New Session"):
@@ -157,3 +163,6 @@ def _reset_session() -> None:
     st.session_state.session_ended = False
     st.session_state.session_persisted = False
     st.session_state.saved_conversation_id = None
+    st.session_state.lesson = None
+    st.session_state.mode = None
+    st.session_state.difficulty = None
