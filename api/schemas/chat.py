@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field, field_validator
 from models.conversation import ChatResponse, Message
 from models.feedback import GrammarFeedback
 
+MAX_HISTORY_MESSAGES = 100
+
 
 class ChatStartRequest(BaseModel):
     lesson_id: str | None = Field(default=None, min_length=1)
@@ -18,7 +20,7 @@ class ChatMessageRequest(BaseModel):
     lesson_id: str | None = Field(default=None, min_length=1)
     difficulty: Literal["beginner", "intermediate", "advanced"] = "beginner"
     mode: Literal["lesson", "free_talk"] = "lesson"
-    messages: list[Message] = Field(min_length=1)
+    messages: list[Message] = Field(min_length=1, max_length=MAX_HISTORY_MESSAGES)
 
     @field_validator("messages")
     @classmethod

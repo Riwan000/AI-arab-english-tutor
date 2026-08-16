@@ -6,12 +6,18 @@ from pydantic import BaseModel, Field
 
 from models.feedback import GrammarFeedback
 
+MAX_MESSAGE_CONTENT_LENGTH = 2000
+
 
 class Message(BaseModel):
-    """Chat or session message — aligns with API chat/session payloads."""
+    """Chat or session message — aligns with API chat/session payloads.
+
+    content is capped to bound per-turn LLM cost; this applies to both
+    ChatMessageRequest and SessionCreateRequest since both reuse this model.
+    """
 
     role: Literal["user", "assistant"]
-    content: str
+    content: str = Field(max_length=MAX_MESSAGE_CONTENT_LENGTH)
     timestamp: str | None = None
     lesson_id: str | None = None
     has_correction: bool = False

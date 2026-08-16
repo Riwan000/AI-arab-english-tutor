@@ -591,3 +591,21 @@ def increment_daily_voice_call_count(user_id: int) -> int:
         return row["voice_call_count"]
     finally:
         conn.close()
+
+
+def get_daily_usage(user_id: int) -> dict:
+    """Return today's message/voice-call counts for user_id (zeros if no activity yet)."""
+    usage_date = datetime.now(timezone.utc).date().isoformat()
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT message_count, voice_call_count FROM daily_usage "
+            "WHERE user_id = ? AND usage_date = ?",
+            (user_id, usage_date),
+        ).fetchone()
+    finally:
+        conn.close()
+    return {
+        "message_count": row["message_count"] if row else 0,
+        "voice_call_count": row["voice_call_count"] if row else 0,
+    }

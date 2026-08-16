@@ -12,6 +12,11 @@ FREE_TALK_START_MESSAGE = (
     "Start the conversation. Greet the student and open with a real-world topic."
 )
 
+# Trailing-window cap on how much history actually reaches the LLM prompt, independent
+# of (and much tighter than) the schema's max message-list length — bounds per-turn
+# prompt cost even when a session sends the schema's full history every turn.
+MAX_HISTORY_MESSAGES = 20
+
 
 def build_messages(
     lesson: dict | None,
@@ -27,7 +32,7 @@ def build_messages(
     )
     messages: list[dict] = [{"role": "system", "content": system_content}]
 
-    for msg in history:
+    for msg in history[-MAX_HISTORY_MESSAGES:]:
         messages.append({"role": msg["role"], "content": msg["content"]})
 
     if start:

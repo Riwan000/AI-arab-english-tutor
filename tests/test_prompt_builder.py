@@ -1,4 +1,4 @@
-from prompts.prompt_builder import build_messages
+from prompts.prompt_builder import MAX_HISTORY_MESSAGES, build_messages
 
 
 LESSON = {
@@ -57,3 +57,15 @@ def test_history_is_preserved_between_system_and_start_message():
     messages = build_messages(LESSON, history)
 
     assert messages[1:] == history
+
+
+def test_history_beyond_trailing_window_is_truncated():
+    history = [
+        {"role": "user" if i % 2 == 0 else "assistant", "content": f"msg {i}"}
+        for i in range(MAX_HISTORY_MESSAGES + 5)
+    ]
+
+    messages = build_messages(LESSON, history)
+
+    assert messages[1:] == history[-MAX_HISTORY_MESSAGES:]
+    assert len(messages) - 1 == MAX_HISTORY_MESSAGES

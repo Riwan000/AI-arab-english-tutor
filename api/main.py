@@ -11,7 +11,7 @@ from slowapi.errors import RateLimitExceeded
 from api.config import get_settings
 from api.dependencies import get_session_repository
 from api.rate_limit import limiter
-from api.routes import auth, chat, health, lessons, sessions
+from api.routes import auth, chat, health, lessons, sessions, usage
 from services.errors import AppError
 
 
@@ -60,6 +60,7 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(lessons.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(sessions.router, prefix="/api/v1")
+app.include_router(usage.router, prefix="/api/v1")
 
 
 @app.exception_handler(AppError)

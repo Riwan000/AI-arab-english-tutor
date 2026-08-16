@@ -81,6 +81,10 @@ def render_sidebar() -> None:
         score = st.session_state.score.get("grammar", 0)
         st.metric("Grammar Score", f"{score}%")
 
+        usage = api_client.get_usage_today()
+        if usage:
+            st.caption(f"Messages today: {usage['messages_used']}/{usage['messages_limit']}")
+
         if st.session_state.mistakes:
             st.caption("Common mistakes")
             for mistake in st.session_state.mistakes[-5:]:

@@ -11,3 +11,7 @@ class UsageRepository:
     def increment_voice_call_count(self, user_id: int) -> int:
         """Increment today's voice-call count for user_id. Returns the new count."""
         return database.increment_daily_voice_call_count(user_id)
+
+    def get_today(self, user_id: int) -> dict:
+        """Return today's message/voice-call counts for user_id."""
+        return database.get_daily_usage(user_id)

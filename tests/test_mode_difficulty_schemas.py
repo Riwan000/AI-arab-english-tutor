@@ -3,8 +3,9 @@
 import pytest
 from pydantic import ValidationError
 
-from api.schemas.chat import ChatMessageRequest, ChatStartRequest
+from api.schemas.chat import MAX_HISTORY_MESSAGES, ChatMessageRequest, ChatStartRequest
 from api.schemas.session import SessionCreateRequest
+from models.conversation import MAX_MESSAGE_CONTENT_LENGTH
 
 
 def test_chat_start_request_defaults_to_beginner_lesson():
@@ -85,3 +86,42 @@ def test_session_create_request_accepts_free_talk_mode():
 def test_session_create_request_rejects_invalid_mode():
     with pytest.raises(ValidationError):
         SessionCreateRequest(mode="quiz", messages=[{"role": "user", "content": "hi"}])
+
+
+def test_chat_message_request_rejects_more_than_max_messages():
+    messages = [{"role": "user", "content": "hi"}] * (MAX_HISTORY_MESSAGES + 1)
+    with pytest.raises(ValidationError):
+        ChatMessageRequest(lesson_id="present_simple", messages=messages)
+
+
+def test_chat_message_request_accepts_exactly_max_messages():
+    messages = [{"role": "assistant", "content": "hi"}] * (MAX_HISTORY_MESSAGES - 1) + [
+        {"role": "user", "content": "hi"}
+    ]
+    request = ChatMessageRequest(lesson_id="present_simple", messages=messages)
+    assert len(request.messages) == MAX_HISTORY_MESSAGES
+
+
+def test_chat_message_request_rejects_content_over_max_length():
+    long_content = "a" * (MAX_MESSAGE_CONTENT_LENGTH + 1)
+    with pytest.raises(ValidationError):
+        ChatMessageRequest(
+            lesson_id="present_simple",
+            messages=[{"role": "user", "content": long_content}],
+        )
+
+
+def test_chat_message_request_accepts_content_at_max_length():
+    content = "a" * MAX_MESSAGE_CONTENT_LENGTH
+    request = ChatMessageRequest(
+        lesson_id="present_simple",
+        messages=[{"role": "user", "content": content}],
+    )
+    assert len(request.messages[0].content) == MAX_MESSAGE_CONTENT_LENGTH
+
+
+def test_session_create_request_rejects_content_over_max_length():
+    """Message.content's cap applies here too since SessionCreateRequest reuses Message."""
+    long_content = "a" * (MAX_MESSAGE_CONTENT_LENGTH + 1)
+    with pytest.raises(ValidationError):
+        SessionCreateRequest(messages=[{"role": "user", "content": long_content}])

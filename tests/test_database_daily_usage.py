@@ -148,3 +148,38 @@ def test_increment_daily_message_count_is_scoped_per_user(tmp_path, monkeypatch)
     db.increment_daily_message_count(user_a)
 
     assert db.increment_daily_message_count(user_b) == 1
+
+
+# --- get_daily_usage ------------------------------------------------------------
+
+
+def test_get_daily_usage_returns_zeros_when_no_activity_yet(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    user_id = db.create_user("learner@example.com", "hash", "Learner")
+
+    usage = db.get_daily_usage(user_id)
+
+    assert usage == {"message_count": 0, "voice_call_count": 0}
+
+
+def test_get_daily_usage_reflects_recorded_activity(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    user_id = db.create_user("learner@example.com", "hash", "Learner")
+
+    db.increment_daily_message_count(user_id)
+    db.increment_daily_message_count(user_id)
+    db.increment_daily_voice_call_count(user_id)
+
+    usage = db.get_daily_usage(user_id)
+
+    assert usage == {"message_count": 2, "voice_call_count": 1}
+
+
+def test_get_daily_usage_is_scoped_per_user(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    user_a = db.create_user("a@example.com", "hash", "A")
+    user_b = db.create_user("b@example.com", "hash", "B")
+
+    db.increment_daily_message_count(user_a)
+
+    assert db.get_daily_usage(user_b) == {"message_count": 0, "voice_call_count": 0}

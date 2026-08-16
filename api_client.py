@@ -240,3 +240,8 @@ def list_sessions(limit: int = 10) -> list[dict]:
 def get_session(session_id: int) -> dict | None:
     data = _request_get(f"/api/v1/sessions/{session_id}", fallback=None)
     return data if isinstance(data, dict) else None
+
+
+def get_usage_today() -> dict | None:
+    data = _request_get("/api/v1/usage/today", fallback=None)
+    return data if isinstance(data, dict) else None
