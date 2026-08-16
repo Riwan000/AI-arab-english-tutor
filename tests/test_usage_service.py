@@ -47,6 +47,7 @@ def test_check_and_increment_raises_once_over_the_limit(monkeypatch, fake_settin
     assert error.status_code == 429
     assert error.detail["remaining"] == 0
     assert error.detail["message"]  # Arabic-first message is present
+    assert error.detail["kind"] == "message"
 
 
 def test_check_and_increment_forwards_the_user_id(monkeypatch, fake_settings):
@@ -79,6 +80,7 @@ def test_check_and_increment_voice_raises_once_over_the_limit(monkeypatch, fake_
 
     assert exc_info.value.status_code == 429
     assert exc_info.value.detail["remaining"] == 0
+    assert exc_info.value.detail["kind"] == "voice"
 
 
 def test_message_and_voice_limit_errors_use_different_messages(monkeypatch, fake_settings):
@@ -93,3 +95,4 @@ def test_message_and_voice_limit_errors_use_different_messages(monkeypatch, fake
         usage.check_and_increment_voice(user_id=1)
 
     assert message_exc.value.detail["message"] != voice_exc.value.detail["message"]
+    assert message_exc.value.detail["kind"] != voice_exc.value.detail["kind"]

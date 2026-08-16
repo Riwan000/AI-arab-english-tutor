@@ -13,7 +13,9 @@ def check_and_increment(user_id: int) -> None:
     limit = get_settings().daily_message_limit
     count = UsageRepository().increment_message_count(user_id)
     if count > limit:
-        raise DailyLimitExceededError(_MESSAGE_LIMIT_MESSAGE, remaining=max(limit - count, 0))
+        raise DailyLimitExceededError(
+            _MESSAGE_LIMIT_MESSAGE, remaining=max(limit - count, 0), kind="message"
+        )
 
 
 def check_and_increment_voice(user_id: int) -> None:
@@ -21,4 +23,6 @@ def check_and_increment_voice(user_id: int) -> None:
     limit = get_settings().daily_voice_call_limit
     count = UsageRepository().increment_voice_call_count(user_id)
     if count > limit:
-        raise DailyLimitExceededError(_VOICE_LIMIT_MESSAGE, remaining=max(limit - count, 0))
+        raise DailyLimitExceededError(
+            _VOICE_LIMIT_MESSAGE, remaining=max(limit - count, 0), kind="voice"
+        )

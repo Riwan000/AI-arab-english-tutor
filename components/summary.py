@@ -171,3 +171,4 @@ def _reset_session() -> None:
     st.session_state.lesson = None
     st.session_state.mode = None
     st.session_state.difficulty = None
+    st.session_state._last_played_audio_index = -1

@@ -61,8 +61,8 @@ class TooManyAttemptsError(AppError):
 class DailyLimitExceededError(AppError):
     status_code = 429
 
-    def __init__(self, message: str, remaining: int = 0) -> None:
-        super().__init__({"message": message, "remaining": remaining})
+    def __init__(self, message: str, remaining: int = 0, kind: str = "message") -> None:
+        super().__init__({"message": message, "remaining": remaining, "kind": kind})
 
 
 class VoiceTranscriptionError(AppError):

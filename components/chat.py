@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 import streamlit as st
+from streamlit_mic_recorder import mic_recorder
 
 import api_client
 from components.correction_card import render_correction_card
@@ -16,16 +17,23 @@ def render_chat() -> None:
 
     st.header(f"تدريب: {lesson['title']}" if lesson else "تدريب: محادثة حرة")
 
-    for message in st.session_state.messages:
+    played_index = st.session_state.get("_last_played_audio_index", -1)
+    for idx, message in enumerate(st.session_state.messages):
         with st.chat_message(message["role"]):
             st.write(message["content"])
             if message.get("feedback"):
-                render_correction_card(message["feedback"])
+                render_correction_card(message["feedback"], key_prefix=f"msg{idx}")
+            if message.get("audio_reply") and idx > played_index:
+                st.audio(message["audio_reply"], autoplay=True)
+                st.session_state["_last_played_audio_index"] = idx
 
     limit_reached = st.session_state.get("daily_limit_reached", False)
 
     if not st.session_state.messages and not limit_reached:
         _start_conversation(lesson)
+
+    if not limit_reached:
+        _handle_voice_input(lesson)
 
     if prompt := st.chat_input(
         "اكتب إجابتك بالإنجليزية..." if not limit_reached else "تم الوصول إلى الحد اليومي للرسائل",
@@ -64,7 +72,25 @@ def _start_conversation(lesson: dict | None) -> None:
     st.rerun()
 
 
-def _handle_user_message(user_text: str, lesson: dict | None) -> None:
+def _handle_voice_input(lesson: dict | None) -> None:
+    audio = mic_recorder(
+        start_prompt="🎙️ تحدث",
+        stop_prompt="⏹ إيقاف",
+        just_once=True,
+        format="webm",
+        key="voice_input",
+    )
+    if not audio or not audio.get("bytes"):
+        return
+
+    text = api_client.transcribe_audio(
+        audio["bytes"], mimetype=f"audio/{audio.get('format', 'webm')}"
+    )
+    if text:
+        _handle_user_message(text, lesson, speak_reply=True)
+
+
+def _handle_user_message(user_text: str, lesson: dict | None, speak_reply: bool = False) -> None:
     st.session_state.messages.append({
         "role": "user",
         "content": user_text,
@@ -100,5 +126,7 @@ def _handle_user_message(user_text: str, lesson: dict | None) -> None:
         "has_correction": bool(feedback),
         **_message_metadata(lesson),
     }
+    if speak_reply:
+        assistant_message["audio_reply"] = api_client.synthesize_speech(result["reply"], "en")
     st.session_state.messages.append(assistant_message)
     st.rerun()

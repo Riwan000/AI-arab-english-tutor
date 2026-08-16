@@ -65,3 +65,23 @@ def test_non_429_dict_detail_is_not_treated_as_daily_limit(fake_st):
 
     assert "daily_limit_reached" not in fake_st.session_state
     fake_st.error.assert_called_once_with("boom")
+
+
+def test_message_kind_429_flags_the_session_state(fake_st):
+    detail = {"message": ARABIC_LIMIT_MESSAGE, "remaining": 0, "kind": "message"}
+
+    api_client._handle_response_error(_status_error(429, detail))
+
+    assert fake_st.session_state["daily_limit_reached"] is True
+
+
+def test_voice_kind_429_does_not_flag_the_session_state(fake_st):
+    # The voice-call limit is a separate counter (services/usage.py:
+    # check_and_increment_voice) from the text-message limit — it must not
+    # disable st.chat_input, which daily_limit_reached does (issue #157).
+    detail = {"message": "voice limit reached", "remaining": 0, "kind": "voice"}
+
+    api_client._handle_response_error(_status_error(429, detail))
+
+    assert "daily_limit_reached" not in fake_st.session_state
+    fake_st.error.assert_called_once_with("voice limit reached")

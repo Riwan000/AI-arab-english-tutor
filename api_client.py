@@ -77,7 +77,17 @@ def _error_message(detail: str | dict | None) -> str:
 
 
 def _is_daily_limit_detail(status_code: int, detail: str | dict | None) -> bool:
-    return status_code == 429 and isinstance(detail, dict) and "remaining" in detail
+    """True for the text-message daily limit only.
+
+    The voice-call limit (`kind: "voice"`) is a separate counter (services/usage.py)
+    and must not disable st.chat_input — only the message limit does that.
+    """
+    return (
+        status_code == 429
+        and isinstance(detail, dict)
+        and "remaining" in detail
+        and detail.get("kind") != "voice"
+    )
 
 
 def _show_error(message: str) -> None:

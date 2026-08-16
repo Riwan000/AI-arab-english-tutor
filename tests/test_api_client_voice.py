@@ -61,11 +61,11 @@ def test_transcribe_audio_sends_auth_header(mock_post):
 
 
 @patch("api_client.httpx.post")
-def test_transcribe_audio_returns_none_and_flags_daily_limit_on_429(mock_post):
+def test_transcribe_audio_returns_none_and_shows_error_on_429(mock_post):
     """The multipart error path must reuse _handle_response_error, same as JSON posts
     (this is the client-side half of #152's independent voice-call metering)."""
     request = httpx.Request("POST", "http://localhost:8000/api/v1/voice/transcribe")
-    detail = {"message": "voice limit reached", "remaining": 0}
+    detail = {"message": "voice limit reached", "remaining": 0, "kind": "voice"}
     response = httpx.Response(429, json={"detail": detail}, request=request)
     mock_post.return_value = response
 
@@ -75,7 +75,26 @@ def test_transcribe_audio_returns_none_and_flags_daily_limit_on_429(mock_post):
         result = api_client.transcribe_audio(b"audio")
 
     assert result is None
-    assert fake_st.session_state["daily_limit_reached"] is True
+    fake_st.error.assert_called_once_with("voice limit reached")
+
+
+@patch("api_client.httpx.post")
+def test_transcribe_audio_429_does_not_disable_typed_chat(mock_post):
+    """A voice-limit 429 must not flip `daily_limit_reached` (issue #157 regression):
+    that flag disables st.chat_input for the whole day, but the voice-call
+    counter (services/usage.py: check_and_increment_voice) is independent from
+    the text-message counter — a user who exhausts voice minutes can still type."""
+    request = httpx.Request("POST", "http://localhost:8000/api/v1/voice/transcribe")
+    detail = {"message": "voice limit reached", "remaining": 0, "kind": "voice"}
+    response = httpx.Response(429, json={"detail": detail}, request=request)
+    mock_post.return_value = response
+
+    fake_st = MagicMock()
+    fake_st.session_state = {}
+    with patch.object(api_client, "st", fake_st):
+        api_client.transcribe_audio(b"audio")
+
+    assert "daily_limit_reached" not in fake_st.session_state
 
 
 @patch("api_client.httpx.post")

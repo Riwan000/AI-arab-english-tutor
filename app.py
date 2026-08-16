@@ -27,6 +27,7 @@ def init_session_state() -> None:
         "mode": None,
         "difficulty": None,
         "daily_limit_reached": False,
+        "_last_played_audio_index": -1,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
