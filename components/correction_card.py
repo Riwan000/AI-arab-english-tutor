@@ -17,9 +17,9 @@ def render_correction_card(feedback: list[GrammarFeedback] | list[dict]) -> None
         data = item if isinstance(item, dict) else item.model_dump()
 
         with st.container(border=True):
-            st.markdown("**Almost! Just one small change.**")
-            st.markdown(f"❌ **Your sentence:** {data.get('wrong_text', '')}")
-            st.markdown(f"✅ **Better sentence:** {data.get('correct_text', '')}")
+            st.markdown("**تقريبًا! تغيير بسيط واحد فقط.**")
+            st.markdown(f"❌ **جملتك:** {data.get('wrong_text', '')}")
+            st.markdown(f"✅ **الجملة الأفضل:** {data.get('correct_text', '')}")
 
             if arabic_explanation := data.get("arabic_explanation"):
                 st.markdown(ARABIC_EXPLANATION_CSS, unsafe_allow_html=True)
@@ -33,4 +33,4 @@ def render_correction_card(feedback: list[GrammarFeedback] | list[dict]) -> None
                 st.caption(english_explanation)
 
             if tip := data.get("tip"):
-                st.caption(f"💡 Tip: {tip}")
+                st.caption(f"💡 نصيحة: {tip}")

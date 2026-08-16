@@ -8,12 +8,12 @@ import api_client
 def render_lesson_view() -> None:
     lesson_meta = st.session_state.get("lesson")
     if not lesson_meta or not lesson_meta.get("id"):
-        st.warning("Please select a lesson from the sidebar.")
+        st.warning("الرجاء اختيار درس من الشريط الجانبي.")
         return
 
     lesson = api_client.get_lesson(lesson_meta["id"])
     if not lesson:
-        st.warning("Could not load lesson details.")
+        st.warning("تعذر تحميل تفاصيل الدرس.")
         return
 
     st.session_state.lesson = lesson
@@ -21,25 +21,25 @@ def render_lesson_view() -> None:
     st.header(lesson["title"])
     st.write(lesson["description"])
 
-    st.subheader("Examples")
+    st.subheader("أمثلة")
     for example in lesson.get("examples", []):
         st.code(example, language=None)
 
     if lesson.get("negative_form"):
-        st.subheader("Negative")
+        st.subheader("النفي")
         for item in lesson["negative_form"]:
             st.code(item, language=None)
 
     if lesson.get("question_form"):
-        st.subheader("Question")
+        st.subheader("السؤال")
         for item in lesson["question_form"]:
             st.code(item, language=None)
 
     if lesson.get("tips"):
-        st.subheader("Tips")
+        st.subheader("نصائح")
         for tip in lesson["tips"]:
             st.info(tip)
 
-    if st.button("Start Practice", type="primary"):
+    if st.button("ابدأ التدريب", type="primary"):
         st.session_state.conversation_started = True
         st.rerun()

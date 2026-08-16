@@ -65,9 +65,9 @@ def main() -> None:
     if "backend_checked" not in st.session_state:
         if not api_client.health_check():
             st.warning(
-                "Cannot reach the backend API. Start uvicorn "
-                "(uvicorn api.main:app --reload --port 8000) and check BACKEND_URL "
-                "in .streamlit/secrets.toml."
+                "تعذّر الوصول إلى واجهة البرمجة الخلفية. شغّل uvicorn "
+                "(uvicorn api.main:app --reload --port 8000) وتحقق من BACKEND_URL "
+                "في .streamlit/secrets.toml."
             )
         st.session_state.backend_checked = True
 
