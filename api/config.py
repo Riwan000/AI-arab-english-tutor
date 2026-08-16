@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     default_model: str = "openai/gpt-4.1"
+    deepgram_api_key: str = ""
     database_path: str = "database/english_tutor.db"
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:8501"]
@@ -45,6 +46,7 @@ class Settings(BaseSettings):
         os.environ["OPENROUTER_API_KEY"] = self.openrouter_api_key
         os.environ["OPENROUTER_BASE_URL"] = self.openrouter_base_url
         os.environ["DEFAULT_MODEL"] = self.default_model
+        os.environ["DEEPGRAM_API_KEY"] = self.deepgram_api_key
         os.environ["DATABASE_PATH"] = self.database_path
         os.environ["RETENTION_DAYS"] = str(self.retention_days)
 

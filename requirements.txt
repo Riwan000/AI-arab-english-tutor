@@ -12,5 +12,6 @@ pydantic-settings>=2.2.0
 bcrypt>=4.0.0
 pyjwt>=2.8.0,<3
 slowapi>=0.1.9
+python-multipart>=0.0.9
 
 # API-only split for separate deployment: see requirements-api.txt

@@ -63,3 +63,23 @@ class DailyLimitExceededError(AppError):
 
     def __init__(self, message: str, remaining: int = 0) -> None:
         super().__init__({"message": message, "remaining": remaining})
+
+
+class VoiceTranscriptionError(AppError):
+    status_code = 502
+    detail = "Could not transcribe the audio. Please try again."
+
+
+class VoiceSynthesisError(AppError):
+    status_code = 502
+    detail = "Could not generate speech. Please try again."
+
+
+class AudioTooLargeError(AppError):
+    status_code = 400
+    detail = "Audio upload exceeds the maximum allowed size"
+
+
+class UnsupportedVoiceLanguageError(AppError):
+    status_code = 400
+    detail = "Speech synthesis is not available for this language yet"

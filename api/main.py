@@ -11,7 +11,7 @@ from slowapi.errors import RateLimitExceeded
 from api.config import get_settings
 from api.dependencies import get_session_repository
 from api.rate_limit import limiter
-from api.routes import auth, chat, health, lessons, sessions, usage
+from api.routes import auth, chat, health, lessons, sessions, usage, voice
 from services.errors import AppError
 
 
@@ -22,12 +22,14 @@ async def lifespan(app: FastAPI):
 
     import services.database as database
     import services.openrouter as openrouter
+    import services.voice as voice
 
     database.DB_PATH = __import__("pathlib").Path(settings.database_path)
     database.RETENTION_DAYS = settings.retention_days
     openrouter.OPENROUTER_API_KEY = settings.openrouter_api_key
     openrouter.OPENROUTER_BASE_URL = settings.openrouter_base_url
     openrouter.DEFAULT_MODEL = settings.default_model
+    voice.DEEPGRAM_API_KEY = settings.deepgram_api_key
 
     try:
         database.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -61,6 +63,7 @@ app.include_router(lessons.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(usage.router, prefix="/api/v1")
+app.include_router(voice.router, prefix="/api/v1")
 
 
 @app.exception_handler(AppError)
