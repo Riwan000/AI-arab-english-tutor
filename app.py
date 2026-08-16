@@ -26,6 +26,7 @@ def init_session_state() -> None:
         "user": None,
         "mode": None,
         "difficulty": None,
+        "daily_limit_reached": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:

@@ -22,10 +22,15 @@ def render_chat() -> None:
             if message.get("feedback"):
                 render_correction_card(message["feedback"])
 
-    if not st.session_state.messages:
+    limit_reached = st.session_state.get("daily_limit_reached", False)
+
+    if not st.session_state.messages and not limit_reached:
         _start_conversation(lesson)
 
-    if prompt := st.chat_input("Type your answer in English..."):
+    if prompt := st.chat_input(
+        "Type your answer in English..." if not limit_reached else "Daily message limit reached",
+        disabled=limit_reached,
+    ):
         _handle_user_message(prompt, lesson)
 
 
@@ -43,6 +48,10 @@ def _start_conversation(lesson: dict | None) -> None:
         mode=st.session_state.get("mode") or "lesson",
     )
     if not result.get("reply"):
+        if st.session_state.get("daily_limit_reached"):
+            # This call is what just set the flag — rerun so the chat_input
+            # below reflects it now instead of on the next unrelated rerun.
+            st.rerun()
         return
 
     assistant_message = {
@@ -72,6 +81,10 @@ def _handle_user_message(user_text: str, lesson: dict | None) -> None:
     )
     if not result.get("reply"):
         st.session_state.messages.pop()
+        if st.session_state.get("daily_limit_reached"):
+            # This call is what just set the flag — rerun so chat_input
+            # disables now instead of accepting one more stray submission.
+            st.rerun()
         return
 
     feedback = result.get("corrections", [])

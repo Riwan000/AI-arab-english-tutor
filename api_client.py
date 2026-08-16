@@ -61,14 +61,21 @@ def _serialize_mistake(mistake: dict | object) -> dict:
     }
 
 
-def _error_detail(response: httpx.Response) -> str:
+def _response_detail(response: httpx.Response) -> str | dict | None:
     try:
-        detail = response.json().get("detail")
-        if detail:
-            return str(detail)
+        return response.json().get("detail")
     except Exception:
-        pass
-    return LLM_UNAVAILABLE
+        return None
+
+
+def _error_message(detail: str | dict | None) -> str:
+    if isinstance(detail, dict):
+        return str(detail.get("message") or LLM_UNAVAILABLE)
+    return str(detail) if detail else LLM_UNAVAILABLE
+
+
+def _is_daily_limit_detail(status_code: int, detail: str | dict | None) -> bool:
+    return status_code == 429 and isinstance(detail, dict) and "remaining" in detail
 
 
 def _show_error(message: str) -> None:
@@ -86,7 +93,10 @@ def _handle_response_error(exc: httpx.HTTPStatusError) -> None:
         set_auth_token(None)
         st.session_state["force_logout"] = True
         return
-    _show_error(_error_detail(exc.response))
+    detail = _response_detail(exc.response)
+    if _is_daily_limit_detail(exc.response.status_code, detail):
+        st.session_state["daily_limit_reached"] = True
+    _show_error(_error_message(detail))
 
 
 def _request_get(
