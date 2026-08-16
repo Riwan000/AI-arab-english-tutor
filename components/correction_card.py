@@ -6,6 +6,7 @@ import json
 import streamlit as st
 import streamlit.components.v1 as components
 
+import i18n
 from models.feedback import GrammarFeedback
 
 ARABIC_EXPLANATION_CSS = (
@@ -56,9 +57,9 @@ def render_correction_card(feedback: list[GrammarFeedback] | list[dict], key_pre
         data = item if isinstance(item, dict) else item.model_dump()
 
         with st.container(border=True):
-            st.markdown("**تقريبًا! تغيير بسيط واحد فقط.**")
-            st.markdown(f"❌ **جملتك:** {data.get('wrong_text', '')}")
-            st.markdown(f"✅ **الجملة الأفضل:** {data.get('correct_text', '')}")
+            st.markdown(f"**{i18n.t('correction_title')}**")
+            st.markdown(f"{i18n.t('your_sentence_label')} {data.get('wrong_text', '')}")
+            st.markdown(f"{i18n.t('better_sentence_label')} {data.get('correct_text', '')}")
 
             if arabic_explanation := data.get("arabic_explanation"):
                 st.markdown(ARABIC_EXPLANATION_CSS, unsafe_allow_html=True)
@@ -67,11 +68,11 @@ def render_correction_card(feedback: list[GrammarFeedback] | list[dict], key_pre
                     f"{html.escape(arabic_explanation)}</div>",
                     unsafe_allow_html=True,
                 )
-                if st.button("🔊 استمع", key=f"{key_prefix}_listen_{idx}"):
+                if st.button(i18n.t("listen_button"), key=f"{key_prefix}_listen_{idx}"):
                     _speak_arabic(arabic_explanation)
 
             if english_explanation := data.get("english_explanation"):
                 st.caption(english_explanation)
 
             if tip := data.get("tip"):
-                st.caption(f"💡 نصيحة: {tip}")
+                st.caption(f"{i18n.t('tip_label')} {tip}")

@@ -3,6 +3,7 @@
 import streamlit as st
 
 import api_client
+import i18n
 
 
 def _on_authenticated(result: dict, cookie_manager) -> None:
@@ -13,25 +14,24 @@ def _on_authenticated(result: dict, cookie_manager) -> None:
     st.rerun()
 
 
-RTL_AUTH_CSS = '<style>.st-key-auth-rtl { direction: rtl; text-align: right; }</style>'
-
-
 def render_auth_view(cookie_manager) -> None:
-    with st.container(key="auth-rtl"):
-        st.markdown(RTL_AUTH_CSS, unsafe_allow_html=True)
-        st.title("📚 معلم اللغة الإنجليزية")
+    i18n.render_language_switcher(cookie_manager, key="auth_lang")
 
-        tab_login, tab_signup = st.tabs(["تسجيل الدخول", "إنشاء حساب"])
+    with st.container(key="auth-rtl"):
+        st.markdown(i18n.rtl_style(".st-key-auth-rtl"), unsafe_allow_html=True)
+        st.title(i18n.t("app_title"))
+
+        tab_login, tab_signup = st.tabs([i18n.t("tab_login"), i18n.t("tab_signup")])
 
         with tab_login:
             with st.form("login_form"):
-                email = st.text_input("البريد الإلكتروني", key="login_email")
+                email = st.text_input(i18n.t("email_label"), key="login_email")
                 password = st.text_input(
-                    "كلمة المرور", type="password", key="login_password"
+                    i18n.t("password_label"), type="password", key="login_password"
                 )
-                if st.form_submit_button("تسجيل الدخول", use_container_width=True):
+                if st.form_submit_button(i18n.t("login_button"), use_container_width=True):
                     if not email or not password:
-                        st.error("الرجاء إدخال البريد الإلكتروني وكلمة المرور.")
+                        st.error(i18n.t("login_validation_error"))
                     else:
                         result = api_client.login(email, password)
                         if result:
@@ -39,17 +39,19 @@ def render_auth_view(cookie_manager) -> None:
 
         with tab_signup:
             with st.form("signup_form"):
-                display_name = st.text_input("الاسم المعروض", key="signup_display_name")
-                email = st.text_input("البريد الإلكتروني", key="signup_email")
+                display_name = st.text_input(
+                    i18n.t("display_name_label"), key="signup_display_name"
+                )
+                email = st.text_input(i18n.t("email_label"), key="signup_email")
                 password = st.text_input(
-                    "كلمة المرور",
+                    i18n.t("password_label"),
                     type="password",
                     key="signup_password",
-                    help="8 أحرف على الأقل.",
+                    help=i18n.t("password_help"),
                 )
-                if st.form_submit_button("إنشاء حساب", use_container_width=True):
+                if st.form_submit_button(i18n.t("signup_button"), use_container_width=True):
                     if not display_name or not email or not password:
-                        st.error("الرجاء تعبئة جميع الحقول.")
+                        st.error(i18n.t("signup_validation_error"))
                     else:
                         result = api_client.signup(email, password, display_name)
                         if result:

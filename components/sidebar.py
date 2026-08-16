@@ -5,7 +5,7 @@ from datetime import datetime
 import streamlit as st
 
 import api_client
-from components.mode_picker import DIFFICULTY_LABELS, MODE_LABELS
+import i18n
 
 
 def _format_date(iso_timestamp: str) -> str:
@@ -16,13 +16,10 @@ def _format_date(iso_timestamp: str) -> str:
         return iso_timestamp[:16]
 
 
-RTL_SIDEBAR_CSS = '<style>[data-testid="stSidebar"] { direction: rtl; text-align: right; }</style>'
-
-
 def render_past_sessions() -> None:
     sessions = api_client.list_sessions(limit=10)
     if not sessions:
-        st.caption("لا توجد جلسات سابقة بعد.")
+        st.caption(i18n.t("no_past_sessions"))
         return
 
     for session in sessions:
@@ -35,41 +32,45 @@ def render_past_sessions() -> None:
             detail = api_client.get_session(session["id"])
             if not detail:
                 continue
-            st.write(f"**التبادلات:** {detail['exchange_count']}")
-            st.write(f"**الأخطاء:** {detail['mistake_count']}")
+            st.write(f"{i18n.t('exchanges_label')} {detail['exchange_count']}")
+            st.write(f"{i18n.t('mistakes_colon_label')} {detail['mistake_count']}")
             if detail.get("vocabulary"):
-                st.write(f"**المفردات:** {', '.join(detail['vocabulary'])}")
+                st.write(f"{i18n.t('vocabulary_colon_label')} {', '.join(detail['vocabulary'])}")
             if detail.get("mistake_types"):
-                st.write("**أنواع الأخطاء:**")
+                st.write(i18n.t("mistake_types_label"))
                 for mt in detail["mistake_types"]:
                     st.write(f"• {mt['mistake_type']} ({mt['count']})")
             if detail.get("recommendation"):
                 st.info(detail["recommendation"])
 
 
-def render_sidebar() -> None:
+def render_sidebar(cookie_manager) -> None:
     with st.sidebar:
-        st.markdown(RTL_SIDEBAR_CSS, unsafe_allow_html=True)
-        st.title("📚 معلم اللغة الإنجليزية")
+        st.title(i18n.t("app_title"))
+        i18n.render_language_switcher(cookie_manager, key="sidebar_lang")
+        st.markdown(i18n.rtl_style('[data-testid="stSidebar"]'), unsafe_allow_html=True)
 
         mode = st.session_state.get("mode")
         difficulty = st.session_state.get("difficulty")
         if mode and difficulty:
             st.caption(
-                f"الوضع: {MODE_LABELS.get(mode, mode)} · "
-                f"المستوى: {DIFFICULTY_LABELS.get(difficulty, difficulty)}"
+                i18n.t(
+                    "mode_difficulty_caption",
+                    mode=i18n.mode_label(mode),
+                    difficulty=i18n.difficulty_label(difficulty),
+                )
             )
 
         if mode == "lesson":
             summaries = api_client.list_lessons()
             if not summaries:
-                st.warning("لا توجد دروس متاحة. تحقق من الاتصال بالخادم.")
+                st.warning(i18n.t("no_lessons_available"))
                 return
 
             lesson_titles = {summary["title"]: summary["id"] for summary in summaries}
 
             selected_title = st.selectbox(
-                "اختر درسًا",
+                i18n.t("choose_lesson_label"),
                 options=list(lesson_titles.keys()),
                 index=0,
             )
@@ -80,36 +81,42 @@ def render_sidebar() -> None:
                     st.session_state.lesson = lesson
 
         st.divider()
-        st.subheader("التقدم")
+        st.subheader(i18n.t("progress_header"))
 
         score = st.session_state.score.get("grammar", 0)
-        st.metric("درجة القواعد", f"{score}%")
+        st.metric(i18n.t("grammar_score_label"), f"{score}%")
 
         usage = api_client.get_usage_today()
         if usage:
-            st.caption(f"الرسائل اليوم: {usage['messages_used']}/{usage['messages_limit']}")
+            st.caption(
+                i18n.t(
+                    "messages_today_caption",
+                    used=usage["messages_used"],
+                    limit=usage["messages_limit"],
+                )
+            )
 
         if st.session_state.mistakes:
-            st.caption("الأخطاء الشائعة")
+            st.caption(i18n.t("common_mistakes_label"))
             for mistake in st.session_state.mistakes[-5:]:
                 mistake_type = (
                     mistake.get("mistake_type")
                     if isinstance(mistake, dict)
                     else mistake.mistake_type
                 )
-                st.write(f"• {mistake_type or 'غير معروف'}")
+                st.write(f"• {mistake_type or i18n.t('unknown_mistake')}")
 
         if st.session_state.vocabulary:
-            st.caption("المفردات")
+            st.caption(i18n.t("vocabulary_label"))
             for word in st.session_state.vocabulary[-8:]:
                 st.write(f"• {word}")
 
         st.divider()
 
         if st.session_state.conversation_started and not st.session_state.session_ended:
-            if st.button("إنهاء الجلسة", use_container_width=True):
+            if st.button(i18n.t("end_session_button"), use_container_width=True):
                 st.session_state.session_ended = True
                 st.rerun()
 
-        st.subheader("الجلسات السابقة")
+        st.subheader(i18n.t("past_sessions_header"))
         render_past_sessions()

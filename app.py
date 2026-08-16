@@ -4,6 +4,7 @@ import extra_streamlit_components as stx
 import streamlit as st
 
 import api_client
+import i18n
 from components.auth_view import render_auth_view
 from components.chat import render_chat
 from components.lesson_view import render_lesson_view
@@ -28,6 +29,7 @@ def init_session_state() -> None:
         "difficulty": None,
         "daily_limit_reached": False,
         "_last_played_audio_index": -1,
+        "_last_voice_file_id": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -49,6 +51,12 @@ def main() -> None:
     cookie_manager = get_cookie_manager()
     token = cookie_manager.get("auth_token")
 
+    if "app_language" not in st.session_state:
+        cookie_language = cookie_manager.get("app_language")
+        st.session_state.app_language = (
+            cookie_language if cookie_language in i18n.LANGUAGE_NAMES else i18n.DEFAULT_LANGUAGE
+        )
+
     if st.session_state.get("force_logout"):
         api_client.set_auth_token(None)
         if token:
@@ -65,14 +73,10 @@ def main() -> None:
 
     if "backend_checked" not in st.session_state:
         if not api_client.health_check():
-            st.warning(
-                "تعذّر الوصول إلى واجهة البرمجة الخلفية. شغّل uvicorn "
-                "(uvicorn api.main:app --reload --port 8000) وتحقق من BACKEND_URL "
-                "في .streamlit/secrets.toml."
-            )
+            st.warning(i18n.t("backend_unreachable"))
         st.session_state.backend_checked = True
 
-    render_sidebar()
+    render_sidebar(cookie_manager)
 
     if st.session_state.mode is None or st.session_state.difficulty is None:
         render_mode_picker()

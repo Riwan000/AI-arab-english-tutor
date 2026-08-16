@@ -47,6 +47,7 @@ def _fake_st(**session_state):
     )
     st.rerun.side_effect = _Rerun
     st.chat_input.return_value = None
+    st.audio_input.return_value = None
     return st
 
 

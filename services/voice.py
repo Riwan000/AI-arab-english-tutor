@@ -1,4 +1,4 @@
-"""Deepgram voice client: Nova-2 speech-to-text and Aura text-to-speech."""
+"""Deepgram voice client: Nova-3 speech-to-text and Aura text-to-speech."""
 
 import os
 
@@ -20,7 +20,7 @@ def transcribe_audio(audio_bytes: bytes, mimetype: str) -> str:
     try:
         response = httpx.post(
             f"{DEEPGRAM_BASE_URL}/listen",
-            params={"model": "nova-2", "smart_format": "true"},
+            params={"model": "nova-3", "smart_format": "true"},
             headers={
                 "Authorization": f"Token {DEEPGRAM_API_KEY}",
                 "Content-Type": mimetype,

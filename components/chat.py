@@ -3,19 +3,23 @@
 from datetime import datetime, timezone
 
 import streamlit as st
-from streamlit_mic_recorder import mic_recorder
 
 import api_client
+import i18n
 from components.correction_card import render_correction_card
 
 
 def render_chat() -> None:
     lesson = st.session_state.get("lesson")
     if st.session_state.mode == "lesson" and not lesson:
-        st.warning("الرجاء اختيار درس من الشريط الجانبي.")
+        st.warning(i18n.t("choose_lesson_warning"))
         return
 
-    st.header(f"تدريب: {lesson['title']}" if lesson else "تدريب: محادثة حرة")
+    st.header(
+        i18n.t("training_header_lesson", title=lesson["title"])
+        if lesson
+        else i18n.t("training_header_free_talk")
+    )
 
     played_index = st.session_state.get("_last_played_audio_index", -1)
     for idx, message in enumerate(st.session_state.messages):
@@ -36,7 +40,7 @@ def render_chat() -> None:
         _handle_voice_input(lesson)
 
     if prompt := st.chat_input(
-        "اكتب إجابتك بالإنجليزية..." if not limit_reached else "تم الوصول إلى الحد اليومي للرسائل",
+        i18n.t("daily_limit_placeholder") if limit_reached else i18n.t("chat_input_placeholder"),
         disabled=limit_reached,
     ):
         _handle_user_message(prompt, lesson)
@@ -73,19 +77,18 @@ def _start_conversation(lesson: dict | None) -> None:
 
 
 def _handle_voice_input(lesson: dict | None) -> None:
-    audio = mic_recorder(
-        start_prompt="🎙️ تحدث",
-        stop_prompt="⏹ إيقاف",
-        just_once=True,
-        format="webm",
-        key="voice_input",
-    )
-    if not audio or not audio.get("bytes"):
+    audio = st.audio_input(i18n.t("voice_input_label"), key="voice_input")
+    if audio is None:
         return
 
-    text = api_client.transcribe_audio(
-        audio["bytes"], mimetype=f"audio/{audio.get('format', 'webm')}"
-    )
+    # st.audio_input keeps returning the same UploadedFile across reruns
+    # until the learner re-records, unlike mic_recorder's just_once=True —
+    # so track the last-processed file_id ourselves to avoid resending it.
+    if audio.file_id == st.session_state.get("_last_voice_file_id"):
+        return
+    st.session_state["_last_voice_file_id"] = audio.file_id
+
+    text = api_client.transcribe_audio(audio.getvalue(), mimetype=audio.type or "audio/wav")
     if text:
         _handle_user_message(text, lesson, speak_reply=True)
 

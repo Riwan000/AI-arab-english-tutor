@@ -1,5 +1,6 @@
-"""Push-to-talk voice input (issue #157): record -> transcribe -> same
-send_message() path as typed input -> spoken reply autoplays once.
+"""Push-to-talk voice input (issue #157, migrated off streamlit-mic-recorder):
+record -> transcribe -> same send_message() path as typed input -> spoken
+reply autoplays once.
 """
 
 from unittest.mock import MagicMock, patch
@@ -26,6 +27,18 @@ class _FakeSessionState(dict):
         self[name] = value
 
 
+class _FakeUploadedFile:
+    """Stand-in for the UploadedFile st.audio_input returns."""
+
+    def __init__(self, data: bytes, file_id: str, content_type: str = "audio/wav"):
+        self._data = data
+        self.file_id = file_id
+        self.type = content_type
+
+    def getvalue(self) -> bytes:
+        return self._data
+
+
 def _fake_st(**session_state):
     st = MagicMock()
     st.session_state = _FakeSessionState(
@@ -34,30 +47,18 @@ def _fake_st(**session_state):
             "lesson": None,
             "messages": [],
             "mistakes": [],
+            "_last_voice_file_id": None,
             **session_state,
         }
     )
     st.rerun.side_effect = _Rerun
     st.chat_input.return_value = None
+    st.audio_input.return_value = None
     return st
 
 
 def test_voice_input_does_nothing_when_recorder_returns_nothing(monkeypatch):
     st = _fake_st()
-    mic_recorder = MagicMock(return_value=None)
-    monkeypatch.setattr(chat_module, "mic_recorder", mic_recorder)
-    transcribe = MagicMock()
-    monkeypatch.setattr(chat_module.api_client, "transcribe_audio", transcribe)
-
-    with patch.object(chat_module, "st", st):
-        chat_module._handle_voice_input(None)
-
-    transcribe.assert_not_called()
-
-
-def test_voice_input_does_nothing_when_audio_has_no_bytes(monkeypatch):
-    st = _fake_st()
-    monkeypatch.setattr(chat_module, "mic_recorder", MagicMock(return_value={"bytes": None}))
     transcribe = MagicMock()
     monkeypatch.setattr(chat_module.api_client, "transcribe_audio", transcribe)
 
@@ -69,8 +70,7 @@ def test_voice_input_does_nothing_when_audio_has_no_bytes(monkeypatch):
 
 def test_voice_input_transcribes_and_reuses_the_same_send_message_path(monkeypatch):
     st = _fake_st()
-    audio = {"bytes": b"raw-audio", "format": "webm"}
-    monkeypatch.setattr(chat_module, "mic_recorder", MagicMock(return_value=audio))
+    st.audio_input.return_value = _FakeUploadedFile(b"raw-audio", file_id="file-1")
     transcribe = MagicMock(return_value="hello teacher")
     monkeypatch.setattr(chat_module.api_client, "transcribe_audio", transcribe)
     handle_user_message = MagicMock()
@@ -79,17 +79,16 @@ def test_voice_input_transcribes_and_reuses_the_same_send_message_path(monkeypat
     with patch.object(chat_module, "st", st):
         chat_module._handle_voice_input({"id": "lesson-1"})
 
-    transcribe.assert_called_once_with(b"raw-audio", mimetype="audio/webm")
+    transcribe.assert_called_once_with(b"raw-audio", mimetype="audio/wav")
     handle_user_message.assert_called_once_with(
         "hello teacher", {"id": "lesson-1"}, speak_reply=True
     )
+    assert st.session_state["_last_voice_file_id"] == "file-1"
 
 
 def test_voice_input_skips_send_when_transcription_is_empty(monkeypatch):
     st = _fake_st()
-    monkeypatch.setattr(
-        chat_module, "mic_recorder", MagicMock(return_value={"bytes": b"x", "format": "webm"})
-    )
+    st.audio_input.return_value = _FakeUploadedFile(b"x", file_id="file-1")
     monkeypatch.setattr(chat_module.api_client, "transcribe_audio", lambda *a, **k: None)
     handle_user_message = MagicMock()
     monkeypatch.setattr(chat_module, "_handle_user_message", handle_user_message)
@@ -100,15 +99,28 @@ def test_voice_input_skips_send_when_transcription_is_empty(monkeypatch):
     handle_user_message.assert_not_called()
 
 
-def test_render_chat_skips_the_recorder_once_the_daily_limit_is_hit(monkeypatch):
+def test_voice_input_does_not_resend_the_same_recording_on_a_later_rerun(monkeypatch):
+    """st.audio_input keeps returning the same file across reruns until the
+    learner re-records — unlike mic_recorder's just_once=True, so this is now
+    our own dedup responsibility."""
+    st = _fake_st(_last_voice_file_id="file-1")
+    st.audio_input.return_value = _FakeUploadedFile(b"raw-audio", file_id="file-1")
+    transcribe = MagicMock()
+    monkeypatch.setattr(chat_module.api_client, "transcribe_audio", transcribe)
+
+    with patch.object(chat_module, "st", st):
+        chat_module._handle_voice_input(None)
+
+    transcribe.assert_not_called()
+
+
+def test_render_chat_skips_the_recorder_once_the_daily_limit_is_hit():
     st = _fake_st(daily_limit_reached=True)
-    mic_recorder = MagicMock()
-    monkeypatch.setattr(chat_module, "mic_recorder", mic_recorder)
 
     with patch.object(chat_module, "st", st):
         chat_module.render_chat()
 
-    mic_recorder.assert_not_called()
+    st.audio_input.assert_not_called()
 
 
 def test_speak_reply_true_stores_audio_bytes_on_the_assistant_message(monkeypatch):
@@ -147,7 +159,7 @@ def test_speak_reply_false_never_calls_synthesize_speech(monkeypatch):
     assert "audio_reply" not in st.session_state["messages"][-1]
 
 
-def test_audio_reply_autoplays_only_once_across_reruns(monkeypatch):
+def test_audio_reply_autoplays_only_once_across_reruns():
     """A message already covered by _last_played_audio_index must not replay
     on a later, unrelated rerun (issue #157: only the newest reply plays)."""
     st = _fake_st(
@@ -156,7 +168,6 @@ def test_audio_reply_autoplays_only_once_across_reruns(monkeypatch):
         ],
         _last_played_audio_index=0,
     )
-    monkeypatch.setattr(chat_module, "mic_recorder", MagicMock(return_value=None))
 
     with patch.object(chat_module, "st", st):
         chat_module.render_chat()
@@ -164,7 +175,7 @@ def test_audio_reply_autoplays_only_once_across_reruns(monkeypatch):
     st.audio.assert_not_called()
 
 
-def test_new_audio_reply_autoplays_and_advances_the_played_index(monkeypatch):
+def test_new_audio_reply_autoplays_and_advances_the_played_index():
     st = _fake_st(
         messages=[
             {"role": "assistant", "content": "Hi", "audio_reply": b"old-audio"},
@@ -173,7 +184,6 @@ def test_new_audio_reply_autoplays_and_advances_the_played_index(monkeypatch):
         ],
         _last_played_audio_index=0,
     )
-    monkeypatch.setattr(chat_module, "mic_recorder", MagicMock(return_value=None))
 
     with patch.object(chat_module, "st", st):
         chat_module.render_chat()

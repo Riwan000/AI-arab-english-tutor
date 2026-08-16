@@ -93,6 +93,14 @@ def _chrome_literals(relative_path: str) -> list[tuple[int, str, str]]:
 GLOBAL_SELECTOR_RE = re.compile(r"<style>\s*(\*|body|html|\.stApp)\s*\{[^}]*direction:\s*rtl")
 DIRECTION_RTL_RE = re.compile(r"direction:\s*rtl")
 DIR_ATTR_RTL_RE = re.compile(r"""dir\s*=\s*["']rtl["']""")
+UNSCOPED_SELECTORS = {"*", "body", "html", ".stApp"}
+# Since #157's i18n system, RTL is computed at render time via
+# i18n.rtl_style(selector) instead of a module-level CSS-string constant
+# (module constants can't react to the app_language session-state toggle).
+# Two alternatives (not a shared [\'"] class) so a selector containing the
+# other quote character — e.g. sidebar.py's '[data-testid="stSidebar"]' —
+# isn't truncated at its first embedded quote.
+RTL_STYLE_CALL_RE = re.compile(r"""i18n\.rtl_style\(\s*(?:'([^']*)'|"([^"]*)")""")
 
 # Pure-chrome screens: pre-existing scoped RTL from 8.6, plus auth/mode-picker
 # chrome completed as part of the #145/#146 sweep (see components/auth_view.py,
@@ -151,14 +159,45 @@ def test_no_hardcoded_english_chrome_strings_remain():
 
 
 def test_rtl_css_is_present_and_scoped_in_arabic_chrome_screens():
-    """Issue #145 — the five pure-Arabic-chrome screens carry scoped RTL CSS."""
+    """Issue #145 — the five pure-Arabic-chrome screens carry scoped RTL CSS.
+
+    RTL support comes either as a literal `direction: rtl` CSS string (e.g.
+    correction_card.py's always-RTL arabic_explanation block) or as a call to
+    `i18n.rtl_style(selector)` (the app-language-aware screens) — either way
+    it must target a specific selector, never the whole page.
+
+    The per-selector checks below run against `i18n.rtl_style()`'s actual
+    return value, not just the selector text parsed out of the caller's
+    source — a static-source-only check would pass even if `rtl_style()`
+    itself started ignoring its argument and hardcoding an unscoped
+    selector, since the caller-side literal would still look fine.
+    """
+    import i18n as i18n_module
+
     for relative_path in RTL_SCOPED_FILES:
         source = _read(relative_path)
-        assert DIRECTION_RTL_RE.search(source), f"{relative_path} is missing RTL CSS"
+        dynamic_calls = [g1 or g2 for g1, g2 in RTL_STYLE_CALL_RE.findall(source)]
+        assert DIRECTION_RTL_RE.search(source) or dynamic_calls, (
+            f"{relative_path} is missing RTL CSS"
+        )
         assert not GLOBAL_SELECTOR_RE.search(source), (
             f"{relative_path} applies RTL with an unscoped selector "
             "(*, body, html, .stApp) instead of a targeted container class"
         )
+        for selector in dynamic_calls:
+            assert selector.strip() not in UNSCOPED_SELECTORS, (
+                f"{relative_path} applies RTL with an unscoped selector "
+                f"({selector}) instead of a targeted container class"
+            )
+            rendered = i18n_module.rtl_style(selector)
+            assert selector in rendered, (
+                f"{relative_path}: i18n.rtl_style({selector!r}) did not honor "
+                f"its selector argument — got {rendered!r}"
+            )
+            assert not GLOBAL_SELECTOR_RE.search(rendered), (
+                f"{relative_path}: i18n.rtl_style({selector!r}) rendered an "
+                f"unscoped selector — got {rendered!r}"
+            )
 
 
 def test_mixed_content_screens_stay_ltr():
