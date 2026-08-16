@@ -5,10 +5,12 @@ import streamlit as st
 
 DEFAULT_TIMEOUT = 10.0
 CHAT_TIMEOUT = 35.0
+VOICE_TIMEOUT = 35.0
 
 BACKEND_UNAVAILABLE = "Could not connect to the backend. Check BACKEND_URL and ensure the API is running."
 CHAT_TIMEOUT_MESSAGE = "The tutor took too long to respond. Please try again."
 REQUEST_TIMEOUT_MESSAGE = "The request took too long. Please try again."
+VOICE_TIMEOUT_MESSAGE = "Voice processing took too long. Please try again."
 LLM_UNAVAILABLE = "The AI tutor is temporarily unavailable. Please try again."
 
 _auth_token: str | None = None
@@ -141,6 +143,49 @@ def _request_post(
     return fallback
 
 
+def _request_post_multipart(
+    path: str,
+    *,
+    files: dict,
+    timeout: float = DEFAULT_TIMEOUT,
+    fallback: object,
+    timeout_message: str = REQUEST_TIMEOUT_MESSAGE,
+) -> object:
+    try:
+        response = httpx.post(_url(path), files=files, timeout=timeout, headers=_auth_headers())
+        response.raise_for_status()
+        return response.json()
+    except httpx.TimeoutException:
+        _show_error(timeout_message)
+    except httpx.HTTPStatusError as exc:
+        _handle_response_error(exc)
+    except httpx.RequestError:
+        _show_error(BACKEND_UNAVAILABLE)
+    return fallback
+
+
+def _request_post_raw(
+    path: str,
+    *,
+    json: dict,
+    timeout: float = DEFAULT_TIMEOUT,
+    fallback: object,
+    timeout_message: str = REQUEST_TIMEOUT_MESSAGE,
+) -> object:
+    """Like _request_post, but returns the raw response body bytes instead of parsed JSON."""
+    try:
+        response = httpx.post(_url(path), json=json, timeout=timeout, headers=_auth_headers())
+        response.raise_for_status()
+        return response.content
+    except httpx.TimeoutException:
+        _show_error(timeout_message)
+    except httpx.HTTPStatusError as exc:
+        _handle_response_error(exc)
+    except httpx.RequestError:
+        _show_error(BACKEND_UNAVAILABLE)
+    return fallback
+
+
 def health_check() -> bool:
     """Return True when the backend health endpoint responds ok (no UI error banner)."""
     try:
@@ -255,3 +300,25 @@ def get_session(session_id: int) -> dict | None:
 def get_usage_today() -> dict | None:
     data = _request_get("/api/v1/usage/today", fallback=None)
     return data if isinstance(data, dict) else None
+
+
+def transcribe_audio(audio_bytes: bytes, mimetype: str = "audio/wav") -> str | None:
+    data = _request_post_multipart(
+        "/api/v1/voice/transcribe",
+        files={"audio": ("audio", audio_bytes, mimetype)},
+        timeout=VOICE_TIMEOUT,
+        fallback=None,
+        timeout_message=VOICE_TIMEOUT_MESSAGE,
+    )
+    return data.get("text") if isinstance(data, dict) else None
+
+
+def synthesize_speech(text: str, language: str = "en") -> bytes | None:
+    data = _request_post_raw(
+        "/api/v1/voice/speak",
+        json={"text": text, "language": language},
+        timeout=VOICE_TIMEOUT,
+        fallback=None,
+        timeout_message=VOICE_TIMEOUT_MESSAGE,
+    )
+    return data if isinstance(data, bytes) else None
