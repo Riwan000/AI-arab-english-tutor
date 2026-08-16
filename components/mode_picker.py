@@ -2,11 +2,11 @@
 
 import streamlit as st
 
-MODE_LABELS = {"lesson": "Lesson", "free_talk": "Free Talk"}
+MODE_LABELS = {"lesson": "درس", "free_talk": "محادثة حرة"}
 DIFFICULTY_LABELS = {
-    "beginner": "Beginner",
-    "intermediate": "Intermediate",
-    "advanced": "Advanced",
+    "beginner": "مبتدئ",
+    "intermediate": "متوسط",
+    "advanced": "متقدم",
 }
 
 

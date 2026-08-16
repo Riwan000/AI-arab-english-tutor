@@ -11,10 +11,10 @@ from components.correction_card import render_correction_card
 def render_chat() -> None:
     lesson = st.session_state.get("lesson")
     if st.session_state.mode == "lesson" and not lesson:
-        st.warning("Please select a lesson from the sidebar.")
+        st.warning("الرجاء اختيار درس من الشريط الجانبي.")
         return
 
-    st.header(f"Practice: {lesson['title']}" if lesson else "Practice: Free Talk")
+    st.header(f"تدريب: {lesson['title']}" if lesson else "تدريب: محادثة حرة")
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
@@ -28,7 +28,7 @@ def render_chat() -> None:
         _start_conversation(lesson)
 
     if prompt := st.chat_input(
-        "Type your answer in English..." if not limit_reached else "Daily message limit reached",
+        "اكتب إجابتك بالإنجليزية..." if not limit_reached else "تم الوصول إلى الحد اليومي للرسائل",
         disabled=limit_reached,
     ):
         _handle_user_message(prompt, lesson)

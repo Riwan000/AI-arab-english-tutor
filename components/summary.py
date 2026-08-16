@@ -48,15 +48,15 @@ def _local_preview_summary() -> dict:
     )
     grammar = max(0, 100 - mistake_count * 10) if exchanges else 0
     lesson_title = (
-        st.session_state.lesson.get("title", "this lesson")
+        st.session_state.lesson.get("title", "هذا الدرس")
         if st.session_state.lesson
-        else "this lesson"
+        else "هذا الدرس"
     )
     recommendation = None
     if grammar < 70:
-        recommendation = f"Practice {lesson_title} again tomorrow."
+        recommendation = f"مارس {lesson_title} مرة أخرى غدًا."
     elif grammar >= 90:
-        recommendation = "Excellent work! Try a harder lesson next."
+        recommendation = "عمل ممتاز! جرّب درسًا أصعب في المرة القادمة."
     return {
         "grammar": grammar,
         "exchanges": exchanges,
@@ -113,47 +113,52 @@ def _load_summary() -> dict:
 
 
 def render_summary() -> None:
-    st.header("Session Summary")
+    with st.container(key="summary-rtl"):
+        st.markdown(
+            '<style>.st-key-summary-rtl { direction: rtl; text-align: right; }</style>',
+            unsafe_allow_html=True,
+        )
+        st.header("ملخص الجلسة")
 
-    saved_id = persist_session()
-    summary = _load_summary()
+        saved_id = persist_session()
+        summary = _load_summary()
 
-    if saved_id:
-        st.caption(f"Session saved (#{saved_id})")
-    elif st.session_state.messages and not st.session_state.get("session_persisted"):
-        st.caption("Session could not be saved to the server.")
+        if saved_id:
+            st.caption(f"تم حفظ الجلسة (#{saved_id})")
+        elif st.session_state.messages and not st.session_state.get("session_persisted"):
+            st.caption("تعذر حفظ الجلسة على الخادم.")
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Grammar Score", f"{summary['grammar']}%")
-    col2.metric("Exchanges", summary["exchanges"])
-    col3.metric("Mistakes", summary["mistake_count"])
+        col1, col2, col3 = st.columns(3)
+        col1.metric("درجة القواعد", f"{summary['grammar']}%")
+        col2.metric("التبادلات", summary["exchanges"])
+        col3.metric("الأخطاء", summary["mistake_count"])
 
-    st.subheader("Vocabulary")
-    if summary["vocabulary"]:
-        st.write(", ".join(summary["vocabulary"]))
-    else:
-        st.write("No vocabulary tracked yet.")
+        st.subheader("المفردات")
+        if summary["vocabulary"]:
+            st.write(", ".join(summary["vocabulary"]))
+        else:
+            st.write("لم يتم تتبع أي مفردات بعد.")
 
-    st.subheader("Common Mistakes")
-    if summary["mistake_types"]:
-        for mistake_type in summary["mistake_types"]:
-            st.write(f"• {mistake_type}")
-    else:
-        st.write("No mistakes — great job!")
+        st.subheader("الأخطاء الشائعة")
+        if summary["mistake_types"]:
+            for mistake_type in summary["mistake_types"]:
+                st.write(f"• {mistake_type}")
+        else:
+            st.write("لا توجد أخطاء — عمل رائع!")
 
-    st.subheader("Recommendation")
-    if st.session_state.lesson:
-        lesson_title = st.session_state.lesson["title"]
-    elif st.session_state.get("mode") == "free_talk":
-        lesson_title = "Free Talk"
-    else:
-        lesson_title = "this lesson"
-    st.info(summary.get("recommendation") or f"Practice {lesson_title} again tomorrow.")
+        st.subheader("التوصية")
+        if st.session_state.lesson:
+            lesson_title = st.session_state.lesson["title"]
+        elif st.session_state.get("mode") == "free_talk":
+            lesson_title = "محادثة حرة"
+        else:
+            lesson_title = "هذا الدرس"
+        st.info(summary.get("recommendation") or f"مارس {lesson_title} مرة أخرى غدًا.")
 
-    if st.button("Start New Session"):
-        persist_session()
-        _reset_session()
-        st.rerun()
+        if st.button("بدء جلسة جديدة"):
+            persist_session()
+            _reset_session()
+            st.rerun()
 
 
 def _reset_session() -> None:

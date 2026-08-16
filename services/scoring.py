@@ -21,12 +21,12 @@ def calculate_session_summary(
 
     vocabulary = _extract_vocabulary(user_messages)
 
-    title = lesson_title or "this lesson"
+    title = lesson_title or "هذا الدرس"
     recommendation = None
     if grammar_score < 70:
-        recommendation = f"Practice {title} again tomorrow."
+        recommendation = f"مارس {title} مرة أخرى غدًا."
     elif grammar_score >= 90:
-        recommendation = "Excellent work! Try a harder lesson next."
+        recommendation = "عمل ممتاز! جرّب درسًا أصعب في المرة القادمة."
 
     return {
         "grammar": grammar_score,
