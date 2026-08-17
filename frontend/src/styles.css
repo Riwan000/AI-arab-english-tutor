@@ -53,6 +53,7 @@ textarea {
 
 .app-shell {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -565,4 +566,113 @@ textarea {
   text-align: center;
   color: #78716c;
   margin-top: 2rem;
+}
+
+/* ==================================================================
+   Mobile
+   ================================================================== */
+@media (max-width: 640px) {
+  /* iOS Safari zooms the viewport on focus of any input under 16px */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .app-header {
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+    padding: 0.7rem 1rem;
+  }
+
+  .app-header h1 {
+    font-size: 1rem;
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .header-actions .btn {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.82rem;
+  }
+
+  .page {
+    padding: 1.25rem 0.75rem;
+  }
+
+  .card {
+    padding: 1.5rem 1.25rem 1.25rem;
+    border-radius: 1rem;
+  }
+
+  .summary-metrics {
+    gap: 0.6rem;
+  }
+
+  .metric {
+    padding: 0.6rem 0.4rem;
+  }
+
+  .metric .metric-value {
+    font-size: 1.3rem;
+  }
+
+  .chat-view {
+    padding: 0.85rem 0.75rem 0;
+  }
+
+  .chat-view-header h2 {
+    font-size: 1rem;
+  }
+
+  .bubble,
+  .bubble-corrections {
+    max-width: 90%;
+  }
+
+  .composer {
+    padding: 0.6rem 0;
+    gap: 0.4rem;
+  }
+
+  .composer input[type="text"] {
+    padding: 0.6rem 0.8rem;
+  }
+
+  .send-btn,
+  .mic-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+  }
+
+  .option-pill,
+  .tabs button {
+    padding: 0.6rem 0.9rem;
+  }
+
+  .lesson-list-item {
+    padding: 0.85rem 1rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .card {
+    padding: 1.25rem 1rem 1rem;
+  }
+
+  .summary-metrics {
+    flex-wrap: wrap;
+  }
+
+  .metric {
+    min-width: calc(50% - 0.3rem);
+  }
+
+  .app-header h1 {
+    font-size: 0.92rem;
+  }
 }
