@@ -192,32 +192,28 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
 
       <div className="message-list" ref={listRef}>
         {messages.map((msg, idx) => (
-          <div key={idx}>
-            <div className={`message-row ${msg.role}`}>
-              <div className={`bubble ${msg.role}`}>
-                {msg.content}
-                {msg.role === "assistant" && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    style={{ marginInlineStart: "0.4rem", fontSize: "0.85rem" }}
-                    onClick={() => handleSpeak(idx, msg.content, { autoArm: idx === messages.length - 1 })}
-                    disabled={speakingIndex === idx}
-                  >
-                    {speakingIndex === idx ? "🔊..." : "🔊"}
-                  </button>
-                )}
-              </div>
-            </div>
-            {msg.corrections && msg.corrections.length > 0 && (
-              <div className="message-row assistant">
-                <div className="bubble-corrections">
+          <div key={idx} className={`message-row ${msg.role}`}>
+            <div className={`bubble ${msg.role}`}>
+              {msg.content}
+              {msg.role === "assistant" && (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ marginInlineStart: "0.4rem", fontSize: "0.85rem" }}
+                  onClick={() => handleSpeak(idx, msg.content, { autoArm: idx === messages.length - 1 })}
+                  disabled={speakingIndex === idx}
+                >
+                  {speakingIndex === idx ? "🔊..." : "🔊"}
+                </button>
+              )}
+              {msg.corrections && msg.corrections.length > 0 && (
+                <div className="corrections-inline">
                   {msg.corrections.map((feedback, fIdx) => (
                     <CorrectionCard key={fIdx} t={t} feedback={feedback} />
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -245,4 +241,3 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
     </div>
   );
 }
-
