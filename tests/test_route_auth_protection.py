@@ -39,6 +39,7 @@ client = TestClient(app)
         ),
         ("get", "/api/v1/sessions", None),
         ("get", "/api/v1/sessions/1", None),
+        ("get", "/api/v1/chat/draft", None),
     ],
 )
 def test_protected_route_rejects_missing_auth_header(method, path, json_body):

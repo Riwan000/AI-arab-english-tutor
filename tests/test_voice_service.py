@@ -33,6 +33,12 @@ class _FakeTextToSpeech:
             raise self._error
         return iter(self._chunks)
 
+    def stream(self, **kwargs):
+        self.calls.append(kwargs)
+        if self._error:
+            raise self._error
+        return iter(self._chunks)
+
 
 class _FakeVoicesApi:
     def __init__(self, voices=(), error=None):
@@ -174,60 +180,66 @@ def test_get_voices_wraps_api_errors(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# synthesize_speech
+# synthesize_speech_stream
 # ---------------------------------------------------------------------------
+#
+# synthesize_speech_stream is a generator function: calling it never runs a
+# line of the body (not even the client/language validation) until the
+# caller starts iterating. Every test below has to consume it (list(...) or
+# next(...)) to actually exercise that code, matching how the /speak route
+# pulls its first chunk to surface synthesis errors before streaming starts.
 
-def test_synthesize_speech_returns_joined_audio_bytes(monkeypatch):
+def test_synthesize_speech_stream_yields_the_audio_chunks(monkeypatch):
     tts = _FakeTextToSpeech(chunks=(b"audio-", b"bytes"))
     monkeypatch.setattr(voice, "client", _FakeClient(tts=tts))
     monkeypatch.setattr(voice, "VOICE_MAP", {"en": "voice-en-id", "ar": "voice-ar-id"})
 
-    audio = voice.synthesize_speech("hello there", language="en")
+    chunks = list(voice.synthesize_speech_stream("hello there", language="en"))
 
-    assert audio == b"audio-bytes"
+    assert chunks == [b"audio-", b"bytes"]
 
 
-def test_synthesize_speech_sends_the_voice_id_model_and_text(monkeypatch):
+def test_synthesize_speech_stream_sends_the_voice_id_model_and_text(monkeypatch):
     tts = _FakeTextToSpeech()
     monkeypatch.setattr(voice, "client", _FakeClient(tts=tts))
     monkeypatch.setattr(voice, "VOICE_MAP", {"en": "voice-en-id", "ar": "voice-ar-id"})
 
-    voice.synthesize_speech("hello there", language="en")
+    list(voice.synthesize_speech_stream("hello there", language="en"))
 
     assert tts.calls == [
         {"voice_id": "voice-en-id", "model_id": "eleven_multilingual_v2", "text": "hello there"}
     ]
 
 
-def test_synthesize_speech_raises_without_an_api_key(monkeypatch):
+def test_synthesize_speech_stream_raises_without_an_api_key(monkeypatch):
     monkeypatch.setattr(voice, "client", None)
 
     with pytest.raises(VoiceSynthesisError):
-        voice.synthesize_speech("hello")
+        next(voice.synthesize_speech_stream("hello"))
 
 
-def test_synthesize_speech_rejects_an_unsupported_language(monkeypatch):
+def test_synthesize_speech_stream_rejects_an_unsupported_language(monkeypatch):
     monkeypatch.setattr(voice, "client", _FakeClient())
     monkeypatch.setattr(voice, "VOICE_MAP", {"en": "voice-en-id", "ar": "voice-ar-id"})
 
     with pytest.raises(VoiceSynthesisError):
-        voice.synthesize_speech("hello", language="fr")
+        next(voice.synthesize_speech_stream("hello", language="fr"))
 
 
-def test_synthesize_speech_raises_when_no_voice_id_is_configured(monkeypatch):
+def test_synthesize_speech_stream_raises_when_no_voice_id_is_configured(monkeypatch):
     monkeypatch.setattr(voice, "client", _FakeClient())
     monkeypatch.setattr(voice, "VOICE_MAP", {"en": "", "ar": "voice-ar-id"})
 
     with pytest.raises(VoiceSynthesisError):
-        voice.synthesize_speech("hello", language="en")
+        next(voice.synthesize_speech_stream("hello", language="en"))
 
 
-def test_synthesize_speech_wraps_api_errors(monkeypatch):
+def test_synthesize_speech_stream_wraps_api_errors(monkeypatch):
     tts = _FakeTextToSpeech(error=RuntimeError("boom"))
     monkeypatch.setattr(voice, "client", _FakeClient(tts=tts))
     monkeypatch.setattr(voice, "VOICE_MAP", {"en": "voice-en-id", "ar": "voice-ar-id"})
 
     with pytest.raises(VoiceSynthesisError) as exc_info:
-        voice.synthesize_speech("hello", language="en")
+        next(voice.synthesize_speech_stream("hello", language="en"))
 
     assert exc_info.value.status_code == 502

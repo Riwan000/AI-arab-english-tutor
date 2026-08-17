@@ -1,4 +1,9 @@
+import json
+
+import pytest
+
 import services.conversation as conversation
+from repositories.draft_repo import DraftRepository
 from repositories.session_repo import SessionRepository
 from services import openrouter
 
@@ -165,3 +170,118 @@ def test_end_session_defaults_mode_to_lesson(monkeypatch):
     conversation.end_session("present_simple", messages, [])
 
     assert captured["mode"] == "lesson"
+
+
+# --- session_ending (Feature A) -------------------------------------------------
+
+
+def test_send_message_threads_session_ending_true_from_llm(monkeypatch):
+    raw = json.dumps({"reply": "Bye! See you next time.", "corrections": [], "session_ending": True})
+    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+
+    response = conversation.send_message(None, [], "goodbye", mode="free_talk")
+
+    assert response.session_ending is True
+
+
+def test_send_message_threads_session_ending_false_from_llm(monkeypatch):
+    raw = json.dumps({"reply": "Tell me more!", "corrections": [], "session_ending": False})
+    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+
+    response = conversation.send_message(None, [], "I like pizza", mode="free_talk")
+
+    assert response.session_ending is False
+
+
+def test_send_message_defaults_session_ending_false_when_response_field_missing(monkeypatch):
+    raw = json.dumps({"reply": "Tell me more!", "corrections": []})
+    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+
+    response = conversation.send_message(None, [], "I like pizza", mode="free_talk")
+
+    assert response.session_ending is False
+
+
+def test_send_message_farewell_keyword_flags_session_ending_even_when_llm_omits_it(monkeypatch):
+    """The LLM ignoring the field must not stop an obvious 'bye' from ending the chat."""
+    raw = json.dumps({"reply": "Bye!", "corrections": []})
+    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+
+    response = conversation.send_message(None, [], "ok bye", mode="free_talk")
+
+    assert response.session_ending is True
+
+
+# --- draft persistence (Feature B) ----------------------------------------------
+
+
+def test_send_message_saves_a_draft_in_free_talk_when_not_ending(monkeypatch):
+    raw = json.dumps({"reply": "Nice! Tell me more.", "corrections": [], "session_ending": False})
+    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+
+    captured = {}
+
+    def fake_save(self, user_id, messages, lesson_id=None, mode="free_talk", difficulty=None):
+        captured["user_id"] = user_id
+        captured["messages"] = messages
+        captured["mode"] = mode
+
+    monkeypatch.setattr(DraftRepository, "save", fake_save)
+    monkeypatch.setattr(DraftRepository, "delete", lambda self, user_id: pytest.fail("should not delete"))
+
+    conversation.send_message(None, [], "I like pizza", mode="free_talk", user_id=7)
+
+    assert captured["user_id"] == 7
+    assert captured["messages"][-1] == {"role": "assistant", "content": "Nice! Tell me more."}
+    assert captured["mode"] == "free_talk"
+
+
+def test_send_message_deletes_draft_when_session_ending(monkeypatch):
+    raw = json.dumps({"reply": "Bye!", "corrections": [], "session_ending": True})
+    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+
+    captured = {}
+    monkeypatch.setattr(DraftRepository, "delete", lambda self, user_id: captured.setdefault("deleted_for", user_id))
+    monkeypatch.setattr(DraftRepository, "save", lambda self, *a, **k: pytest.fail("should not save"))
+
+    conversation.send_message(None, [], "bye", mode="free_talk", user_id=7)
+
+    assert captured["deleted_for"] == 7
+
+
+def test_send_message_skips_draft_persistence_without_user_id(monkeypatch):
+    raw = json.dumps({"reply": "ok", "corrections": [], "session_ending": False})
+    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+    monkeypatch.setattr(DraftRepository, "save", lambda self, *a, **k: pytest.fail("should not save"))
+    monkeypatch.setattr(DraftRepository, "delete", lambda self, *a, **k: pytest.fail("should not delete"))
+
+    conversation.send_message(None, [], "hi", mode="free_talk", user_id=None)
+
+
+def test_send_message_skips_draft_persistence_in_lesson_mode(monkeypatch):
+    raw = json.dumps({"reply": "ok", "corrections": [], "session_ending": False})
+    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+    monkeypatch.setattr(DraftRepository, "save", lambda self, *a, **k: pytest.fail("should not save"))
+    monkeypatch.setattr(DraftRepository, "delete", lambda self, *a, **k: pytest.fail("should not delete"))
+
+    conversation.send_message("present_simple", [], "hi", mode="lesson", user_id=7)
+
+
+def test_end_session_deletes_draft_after_successful_save(monkeypatch):
+    monkeypatch.setattr(SessionRepository, "save", lambda self, **kwargs: 1)
+
+    captured = {}
+    monkeypatch.setattr(DraftRepository, "delete", lambda self, user_id: captured.setdefault("deleted_for", user_id))
+
+    messages = [{"role": "user", "content": "hi"}]
+    conversation.end_session(None, messages, [], mode="free_talk", user_id=9)
+
+    assert captured["deleted_for"] == 9
+
+
+def test_end_session_skips_draft_delete_without_user_id(monkeypatch):
+    monkeypatch.setattr(SessionRepository, "save", lambda self, **kwargs: 1)
+    monkeypatch.setattr(DraftRepository, "delete", lambda self, *a, **k: pytest.fail("should not delete"))
+
+    messages = [{"role": "user", "content": "hi"}]
+    conversation.end_session(None, messages, [], mode="free_talk")

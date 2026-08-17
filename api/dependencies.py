@@ -6,6 +6,7 @@ from fastapi import Depends, Header, HTTPException
 
 from api.config import Settings, get_settings
 from models.user import User
+from repositories.draft_repo import DraftRepository
 from repositories.session_repo import SessionRepository
 from repositories.usage_repo import UsageRepository
 from repositories.user_repo import UserRepository
@@ -31,6 +32,11 @@ def get_user_repository() -> UserRepository:
 @lru_cache
 def get_usage_repository() -> UsageRepository:
     return UsageRepository()
+
+
+@lru_cache
+def get_draft_repository() -> DraftRepository:
+    return DraftRepository()
 
 
 def get_current_user(

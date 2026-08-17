@@ -25,6 +25,7 @@ APP_TABLES = (
     "conversations",
     "messages",
     "grammar_feedback",
+    "draft_conversations",
 )
 
 TRUNCATE_SQL = (

@@ -2,10 +2,11 @@
 
 from fastapi import APIRouter, Depends
 
-from api.dependencies import get_current_user
+from api.dependencies import get_current_user, get_draft_repository
 from api.schemas.chat import ChatMessageRequest, ChatStartRequest
-from models.conversation import ChatResponse
+from models.conversation import ChatResponse, DraftConversation
 from models.user import User
+from repositories.draft_repo import DraftRepository
 from services import conversation, usage
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -36,5 +37,24 @@ def send_chat_message(
         body.difficulty,
         body.mode,
         user_id=current_user.id,
+    )
+
+
+@router.get("/draft", response_model=DraftConversation | None)
+def get_chat_draft(
+    repo: DraftRepository = Depends(get_draft_repository),
+    current_user: User = Depends(get_current_user),
+) -> DraftConversation | None:
+    """Return the caller's in-progress free-talk conversation, or null if none exists."""
+    row = repo.get(current_user.id)
+    if row is None:
+        return None
+
+    return DraftConversation(
+        messages=row.get("messages") or [],
+        lesson_id=row.get("lesson_id"),
+        mode=row.get("mode", "free_talk"),
+        difficulty=row.get("difficulty"),
+        updated_at=row.get("updated_at"),
     )
 

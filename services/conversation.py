@@ -5,6 +5,7 @@ import os
 from models.conversation import ChatResponse, SessionSummary
 from models.feedback import GrammarFeedback
 from prompts.prompt_builder import build_messages, format_past_context
+from repositories.draft_repo import DraftRepository
 from repositories.session_repo import SessionRepository
 from services import grammar, lessons, openrouter, scoring
 
@@ -64,7 +65,27 @@ def send_message(
     raw = openrouter.chat_completion(prompt_messages)
     reply, corrections = grammar.parse_response(raw)
 
-    return ChatResponse(reply=reply, corrections=corrections)
+    # OR'd with a cheap keyword fallback so an obvious "bye" still ends the
+    # conversation even if the model forgets to set the JSON flag.
+    session_ending = grammar.extract_session_ending(raw) or grammar.contains_farewell_keyword(
+        user_text
+    )
+
+    if mode == "free_talk" and user_id is not None:
+        if session_ending:
+            # The conversation is finishing — it'll be finalized into a
+            # completed session via end_session, so don't leave a stale draft.
+            DraftRepository().delete(user_id)
+        else:
+            DraftRepository().save(
+                user_id,
+                messages=[*history, {"role": "assistant", "content": reply}],
+                lesson_id=lesson_id,
+                mode=mode,
+                difficulty=difficulty,
+            )
+
+    return ChatResponse(reply=reply, corrections=corrections, session_ending=session_ending)
 
 
 
@@ -111,6 +132,11 @@ def end_session(
 
     if conversation_id is None:
         return None
+
+    if user_id is not None:
+        # Now finalized into a completed session — clear the draft so it
+        # isn't offered for resume again (idempotent if none existed).
+        DraftRepository().delete(user_id)
 
     return SessionSummary(
         id=conversation_id,

@@ -1,6 +1,7 @@
 """ElevenLabs voice client: Scribe v2 STT and multilingual TTS."""
 
 import os
+from collections.abc import Iterator
 
 from elevenlabs.client import ElevenLabs
 
@@ -151,10 +152,12 @@ def get_voices(language: str):
 # Text-to-Speech
 # ---------------------------------------------------------------------------
 
-def synthesize_speech(
+def synthesize_speech_stream(
     text: str,
     language: str = "en",
-) -> bytes:
+) -> Iterator[bytes]:
+    """Stream synthesized speech as MP3 chunks as ElevenLabs generates them,
+    so callers can start playback before the full clip is ready."""
 
     if client is None:
         raise VoiceSynthesisError(
@@ -176,13 +179,11 @@ def synthesize_speech(
         )
 
     try:
-        audio = client.text_to_speech.convert(
+        yield from client.text_to_speech.stream(
             voice_id=voice_id,
             model_id="eleven_multilingual_v2",
             text=text,
         )
-
-        return b"".join(audio)
 
     except Exception as exc:
         raise VoiceSynthesisError(

@@ -59,6 +59,49 @@ def test_history_is_preserved_between_system_and_start_message():
     assert messages[1:] == history
 
 
+def test_format_past_context_includes_recent_topics_from_vocabulary():
+    from prompts.prompt_builder import format_past_context
+
+    profile = {
+        "recent_sessions": [
+            {
+                "lesson_title": "Free Talk",
+                "grammar_score": 80,
+                "recommendation": None,
+                "vocabulary": ["Travel", "Airport", "Ticket"],
+            },
+            {
+                "lesson_title": "Free Talk",
+                "grammar_score": 70,
+                "recommendation": None,
+                "vocabulary": ["Cooking", "Recipe"],
+            },
+        ],
+        "top_mistakes": [],
+    }
+
+    result = format_past_context(profile)
+
+    assert "Recently Discussed Topics/Vocabulary:" in result
+    assert "Travel, Airport, Ticket" in result
+    assert "Cooking, Recipe" in result
+
+
+def test_format_past_context_omits_topics_line_when_no_vocabulary_present():
+    from prompts.prompt_builder import format_past_context
+
+    profile = {
+        "recent_sessions": [
+            {"lesson_title": "Free Talk", "grammar_score": 80, "recommendation": None}
+        ],
+        "top_mistakes": [],
+    }
+
+    result = format_past_context(profile)
+
+    assert "Recently Discussed Topics/Vocabulary:" not in result
+
+
 def test_history_beyond_trailing_window_is_truncated():
     history = [
         {"role": "user" if i % 2 == 0 else "assistant", "content": f"msg {i}"}

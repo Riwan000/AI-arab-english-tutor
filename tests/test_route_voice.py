@@ -17,7 +17,9 @@ from services.errors import VoiceSynthesisError, VoiceTranscriptionError  # noqa
 def scoped_client(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", SECRET)
     monkeypatch.setattr(voice, "transcribe_audio", lambda audio_bytes, mimetype: ("hello there", "en"))
-    monkeypatch.setattr(voice, "synthesize_speech", lambda text, language: b"fake-audio-bytes")
+    monkeypatch.setattr(
+        voice, "synthesize_speech_stream", lambda text, language: iter([b"fake-audio-bytes"])
+    )
 
     from api.config import get_settings
 
@@ -219,7 +221,7 @@ def test_speak_propagates_deepgram_failures_as_502(scoped_client, monkeypatch):
     def raise_error(text, language):
         raise VoiceSynthesisError()
 
-    monkeypatch.setattr(voice, "synthesize_speech", raise_error)
+    monkeypatch.setattr(voice, "synthesize_speech_stream", raise_error)
 
     response = scoped_client.post(
         "/api/v1/voice/speak",

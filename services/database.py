@@ -215,11 +215,15 @@ def list_past_sessions(limit: int = 30, *, user_id: int) -> list[dict]:
 
 
 def get_user_learning_profile(user_id: int, session_limit: int = 5) -> dict:
-    """Fetch user's recent sessions and top recurring grammar mistakes across all their sessions."""
+    """Fetch user's recent sessions and top recurring grammar mistakes across all their sessions.
+
+    `vocabulary` is included per session so the prompt digest can mention a
+    couple of recently-discussed topics, not just aggregate mistake counts.
+    """
     with get_connection() as conn:
         sessions = conn.execute(
             """
-            SELECT lesson_title, grammar_score, recommendation, ended_at
+            SELECT lesson_title, grammar_score, recommendation, ended_at, vocabulary
             FROM conversations
             WHERE user_id = %s
             ORDER BY ended_at DESC
@@ -241,8 +245,14 @@ def get_user_learning_profile(user_id: int, session_limit: int = 5) -> dict:
             (user_id,),
         ).fetchall()
 
+    recent_sessions = []
+    for row in sessions:
+        session = _isoformat_temporals(row)
+        session["vocabulary"] = session.get("vocabulary") or []
+        recent_sessions.append(session)
+
     return {
-        "recent_sessions": [_isoformat_temporals(row) for row in sessions],
+        "recent_sessions": recent_sessions,
         "top_mistakes": [row["mistake_type"] for row in mistakes],
     }
 
@@ -277,6 +287,61 @@ def get_session_summary(conversation_id: int, *, user_id: int) -> dict | None:
             (conversation_id,),
         ).fetchall()
         return session
+
+
+def save_draft(
+    user_id: int,
+    messages: list[dict],
+    lesson_id: str | None = None,
+    mode: str = "free_talk",
+    difficulty: str | None = None,
+) -> None:
+    """Upsert the caller's single in-progress draft conversation.
+
+    One draft per user — a later call replaces the earlier one rather than
+    adding a second row (`unique (user_id)` backs the ON CONFLICT).
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO draft_conversations (
+                user_id, lesson_id, mode, difficulty, messages, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE SET
+                lesson_id = excluded.lesson_id,
+                mode = excluded.mode,
+                difficulty = excluded.difficulty,
+                messages = excluded.messages,
+                updated_at = excluded.updated_at
+            """,
+            (user_id, lesson_id, mode, difficulty, Jsonb(messages), now),
+        )
+
+
+def get_draft(user_id: int) -> dict | None:
+    """Fetch the caller's in-progress draft conversation. None if there isn't one."""
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT lesson_id, mode, difficulty, messages, updated_at
+            FROM draft_conversations
+            WHERE user_id = %s
+            """,
+            (user_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    draft = _isoformat_temporals(row)
+    # jsonb comes back already decoded; NULL becomes an empty list.
+    draft["messages"] = draft.get("messages") or []
+    return draft
+
+
+def delete_draft(user_id: int) -> None:
+    """Delete the caller's draft conversation, if one exists. Idempotent."""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM draft_conversations WHERE user_id = %s", (user_id,))
 
 
 def create_user(email: str, password_hash: str, display_name: str) -> int:

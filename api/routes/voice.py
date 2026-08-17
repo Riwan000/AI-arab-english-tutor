@@ -1,7 +1,9 @@
 """Voice endpoints: speech-to-text transcription and text-to-speech synthesis."""
 
+from itertools import chain
+
 from fastapi import APIRouter, Depends, File, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import StreamingResponse
 
 from api.dependencies import get_current_user
 from api.schemas.voice import (
@@ -74,16 +76,21 @@ async def transcribe(
 def speak(
     body: SpeakRequest,
     current_user: User = Depends(get_current_user),
-) -> Response:
+) -> StreamingResponse:
 
     usage.check_and_increment_voice(current_user.id)
 
-    audio_bytes = voice.synthesize_speech(
+    chunks = voice.synthesize_speech_stream(
         body.text,
         language=body.language,
     )
 
-    return Response(
-        content=audio_bytes,
+    # Pull the first chunk now, while we're still free to return a normal
+    # error response — once StreamingResponse starts sending, the 200 status
+    # is already committed and a mid-stream failure can only truncate audio.
+    first_chunk = next(chunks)
+
+    return StreamingResponse(
+        chain([first_chunk], chunks),
         media_type="audio/mpeg",
     )

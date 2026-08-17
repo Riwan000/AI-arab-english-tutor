@@ -39,6 +39,19 @@ def format_past_context(past_profile: dict | None) -> str:
             rec = f" — Recommendation: {s['recommendation']}" if s.get("recommendation") else ""
             parts.append(f"- {title} (Grammar Score: {score}){rec}")
 
+        # Last couple of sessions' vocabulary stands in for "topics discussed"
+        # (no separate topic field is stored), so free-talk still feels
+        # continuous even in a brand-new, non-resumed session.
+        recent_topics = [
+            f"{s.get('lesson_title', 'Session')}: {', '.join(s['vocabulary'][:5])}"
+            for s in sessions[:2]
+            if s.get("vocabulary")
+        ]
+        if recent_topics:
+            parts.append("Recently Discussed Topics/Vocabulary:")
+            for topic in recent_topics:
+                parts.append(f"- {topic}")
+
     if top_mistakes:
         parts.append("Frequent Weak Spots & Mistake Patterns to Reinforce:")
         for m in top_mistakes:
@@ -108,5 +121,13 @@ def _build_free_talk_content(difficulty: str, past_context: str | None = None) -
 
     difficulty_block = get_difficulty_block(difficulty)
 
-    return f"{get_system_prompt()}\n\n{free_talk_context}\n\n{difficulty_block}"
+    # Appended explicitly rather than relying solely on a {past_context}
+    # placeholder inside the template — the free-talk template's own
+    # placeholders can change independently of this, and str.format()
+    # silently drops unused kwargs instead of erroring, so a missing
+    # placeholder there would otherwise fail silently.
+    return (
+        f"{get_system_prompt()}\n\n{free_talk_context}\n\n"
+        f"## Student History\n{ctx}\n\n{difficulty_block}"
+    )
 

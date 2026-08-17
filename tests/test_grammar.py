@@ -110,3 +110,103 @@ def test_parse_response_survives_non_list_corrections_field():
 
     assert reply == "Great job!"
     assert corrections == []
+
+
+# --- extract_session_ending ----------------------------------------------------
+
+
+def test_extract_session_ending_reads_true_from_json():
+    raw = json.dumps({"reply": "Bye!", "corrections": [], "session_ending": True})
+
+    assert grammar.extract_session_ending(raw) is True
+
+
+def test_extract_session_ending_reads_false_from_json():
+    raw = json.dumps({"reply": "Tell me more.", "corrections": [], "session_ending": False})
+
+    assert grammar.extract_session_ending(raw) is False
+
+
+def test_extract_session_ending_defaults_false_when_field_missing():
+    raw = json.dumps({"reply": "Tell me more.", "corrections": []})
+
+    assert grammar.extract_session_ending(raw) is False
+
+
+def test_extract_session_ending_defaults_false_for_non_json_response():
+    assert grammar.extract_session_ending("Hello! How are you?") is False
+
+
+def test_extract_session_ending_defaults_false_for_non_dict_json():
+    assert grammar.extract_session_ending(json.dumps(["reply", "corrections"])) is False
+
+
+def test_extract_session_ending_coerces_truthy_non_bool_value():
+    raw = json.dumps({"reply": "Bye!", "corrections": [], "session_ending": "true"})
+
+    assert grammar.extract_session_ending(raw) is True
+
+
+def test_extract_session_ending_reads_true_from_fenced_block_with_corrections():
+    raw = (
+        "Bye! It was great practicing with you.\n"
+        "```json\n"
+        '{"corrections": [{'
+        '"mistake_type": "tense", "wrong_text": "I go", "correct_text": "I went", '
+        '"english_explanation": "Use past tense.", "arabic_explanation": "استخدم الماضي.", '
+        '"tip": "Try again."'
+        '}], "session_ending": true}\n'
+        "```"
+    )
+
+    assert grammar.extract_session_ending(raw) is True
+
+
+def test_extract_session_ending_reads_true_from_fenced_block_without_corrections():
+    raw = (
+        "Goodbye! See you next time.\n"
+        "```json\n"
+        '{"session_ending": true}\n'
+        "```"
+    )
+
+    assert grammar.extract_session_ending(raw) is True
+
+
+def test_extract_session_ending_defaults_false_for_prose_with_no_fenced_block():
+    raw = "Great job! Let's keep practicing. What did you do today?"
+
+    assert grammar.extract_session_ending(raw) is False
+
+
+def test_extract_session_ending_defaults_false_for_malformed_json_in_fence():
+    raw = (
+        "Bye!\n"
+        "```json\n"
+        '{"session_ending": true, "corrections": [}\n'
+        "```"
+    )
+
+    assert grammar.extract_session_ending(raw) is False
+
+
+# --- contains_farewell_keyword --------------------------------------------------
+
+
+def test_contains_farewell_keyword_matches_common_english_farewells():
+    assert grammar.contains_farewell_keyword("ok bye!") is True
+    assert grammar.contains_farewell_keyword("Goodbye for now") is True
+    assert grammar.contains_farewell_keyword("that's all for today, thanks") is True
+
+
+def test_contains_farewell_keyword_matches_arabic_farewells():
+    assert grammar.contains_farewell_keyword("مع السلامة") is True
+    assert grammar.contains_farewell_keyword("خلصت شكرا") is True
+
+
+def test_contains_farewell_keyword_is_case_insensitive():
+    assert grammar.contains_farewell_keyword("BYE") is True
+
+
+def test_contains_farewell_keyword_does_not_match_ordinary_text():
+    assert grammar.contains_farewell_keyword("What is the weather like today?") is False

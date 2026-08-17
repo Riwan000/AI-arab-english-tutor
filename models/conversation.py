@@ -28,6 +28,13 @@ class ChatResponse(BaseModel):
 
     reply: str
     corrections: list[GrammarFeedback] = Field(default_factory=list)
+    session_ending: bool = Field(
+        default=False,
+        description=(
+            "True when the model or the farewell-keyword fallback detected "
+            "that the user wants to end the conversation."
+        ),
+    )
 
 
 class SessionSummary(BaseModel):
@@ -73,3 +80,19 @@ class Conversation(BaseModel):
     lesson_id: str | None
     messages: list[Message] = Field(default_factory=list)
     score: int | None = None
+
+
+class DraftConversation(BaseModel):
+    """Response from GET /api/v1/chat/draft.
+
+    `messages` is plain dicts, not `list[Message]`: a draft is round-tripped
+    verbatim for resuming/display, not re-validated as new input, so it must
+    not 500 if a stored assistant reply happens to exceed Message's
+    request-side content cap.
+    """
+
+    messages: list[dict] = Field(default_factory=list)
+    lesson_id: str | None = None
+    mode: str = "free_talk"
+    difficulty: str | None = None
+    updated_at: str | None = None

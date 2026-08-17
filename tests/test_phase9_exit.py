@@ -7,7 +7,7 @@ against a real (temp) database, the same TestClient pattern as
 test_phase6_exit.py/test_phase7_exit.py, so a regression in the
 metering/route wiring would be caught even if the lower-level unit tests --
 which patch further down the stack -- still pass. The voice provider itself
-stays mocked (services.voice.transcribe_audio/synthesize_speech): these tests
+stays mocked (services.voice.transcribe_audio/synthesize_speech_stream): these tests
 verify our own multipart/metering/response plumbing, not the provider's API.
 """
 
@@ -74,10 +74,10 @@ def scoped_client(monkeypatch, voice_calls):
 
     def fake_synthesize(text, language):
         voice_calls["synthesize"] = (text, language)
-        return b"ID3-fake-mp3-bytes"
+        return iter([b"ID3-fake-mp3-bytes"])
 
     monkeypatch.setattr(voice, "transcribe_audio", fake_transcribe)
-    monkeypatch.setattr(voice, "synthesize_speech", fake_synthesize)
+    monkeypatch.setattr(voice, "synthesize_speech_stream", fake_synthesize)
     monkeypatch.setattr(openrouter, "chat_completion", lambda messages: "Great job!")
 
     from api.config import get_settings

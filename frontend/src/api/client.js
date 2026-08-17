@@ -110,6 +110,7 @@ export const chat = {
       method: "POST",
       body: { lesson_id, difficulty, mode, messages },
     }),
+  getDraft: () => apiFetch("/api/v1/chat/draft"),
 };
 
 export const voice = {
@@ -118,14 +119,14 @@ export const voice = {
     formData.append("audio", audioBlob, "recording.webm");
     return apiFetch("/api/v1/voice/transcribe", { method: "POST", formData });
   },
-  speak: async (text, language) => {
-    const response = await apiFetch("/api/v1/voice/speak", {
+  // Returns the raw Response (not a Blob): the caller streams response.body
+  // into playback as chunks arrive instead of waiting for the full download.
+  speak: (text, language) =>
+    apiFetch("/api/v1/voice/speak", {
       method: "POST",
       body: { text, language },
       raw: true,
-    });
-    return response.blob();
-  },
+    }),
 };
 
 export const sessions = {

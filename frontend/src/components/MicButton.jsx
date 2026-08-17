@@ -1,5 +1,7 @@
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
-import { voice } from "../api/client";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { ApiError, voice } from "../api/client";
+
+const MIC_ERROR_DISPLAY_MS = 4000;
 
 // Silence-based auto-stop:
 // INITIAL_SILENCE_MS gives the learner time to begin speaking when auto-armed.
@@ -11,6 +13,7 @@ const POST_SPEECH_SILENCE_MS = 1800;
 const MicButton = forwardRef(function MicButton({ t, onTranscribed, disabled }, ref) {
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [micError, setMicError] = useState(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
@@ -18,6 +21,15 @@ const MicButton = forwardRef(function MicButton({ t, onTranscribed, disabled }, 
   const silenceTimerRef = useRef(null);
   const rafRef = useRef(null);
   const hasSpokenRef = useRef(false);
+  const errorTimerRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(errorTimerRef.current), []);
+
+  function showError(message) {
+    clearTimeout(errorTimerRef.current);
+    setMicError(message);
+    errorTimerRef.current = setTimeout(() => setMicError(null), MIC_ERROR_DISPLAY_MS);
+  }
 
   useImperativeHandle(ref, () => ({
     startRecording: () => {
@@ -85,6 +97,7 @@ const MicButton = forwardRef(function MicButton({ t, onTranscribed, disabled }, 
 
   async function startRecording() {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") return;
+    setMicError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -101,7 +114,7 @@ const MicButton = forwardRef(function MicButton({ t, onTranscribed, disabled }, 
       setRecording(true);
       watchForSilence(stream, stopRecording);
     } catch {
-      // Mic permission denied or unavailable — nothing to transcribe.
+      showError(t("mic_permission_error"));
     }
   }
 
@@ -126,8 +139,12 @@ const MicButton = forwardRef(function MicButton({ t, onTranscribed, disabled }, 
     try {
       const result = await voice.transcribe(blob);
       if (result.text) onTranscribed(result.text);
-    } catch {
-      // Transcription failed — silently drop, learner can just retry.
+    } catch (err) {
+      const message =
+        err instanceof ApiError && err.detail?.kind === "voice"
+          ? err.detail.message
+          : t("mic_transcribe_error");
+      showError(message);
     } finally {
       setBusy(false);
     }
@@ -142,16 +159,23 @@ const MicButton = forwardRef(function MicButton({ t, onTranscribed, disabled }, 
   }
 
   return (
-    <button
-      type="button"
-      className={`mic-btn ${recording ? "recording" : ""}`}
-      onClick={handleClick}
-      disabled={disabled || busy}
-      title={recording ? t("listening_label") : t("voice_input_label")}
-      aria-label={recording ? t("listening_label") : t("voice_input_label")}
-    >
-      {recording ? "⏹" : "🎙️"}
-    </button>
+    <div className="mic-wrap">
+      {micError && (
+        <span className="mic-error" role="alert">
+          {micError}
+        </span>
+      )}
+      <button
+        type="button"
+        className={`mic-btn ${recording ? "recording" : ""}`}
+        onClick={handleClick}
+        disabled={disabled || busy}
+        title={recording ? t("listening_label") : t("voice_input_label")}
+        aria-label={recording ? t("listening_label") : t("voice_input_label")}
+      >
+        {recording ? "⏹" : "🎙️"}
+      </button>
+    </div>
   );
 });
 

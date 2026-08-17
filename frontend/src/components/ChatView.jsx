@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, chat, usage, voice } from "../api/client";
 import CorrectionCard from "./CorrectionCard.jsx";
 import MicButton from "./MicButton.jsx";
+import { playStreamedAudio } from "../lib/streamedAudio";
 
 export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSession }) {
   const [messages, setMessages] = useState([]);
@@ -11,10 +12,13 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
   const [speakingIndex, setSpeakingIndex] = useState(null);
   const [limitReached, setLimitReached] = useState(false);
   const [usageToday, setUsageToday] = useState(null);
+  const [draft, setDraft] = useState(null);
+  const [endingSession, setEndingSession] = useState(false);
   const listRef = useRef(null);
   const audioRef = useRef(null);
   const micRef = useRef(null);
   const startedRef = useRef(false);
+  const speechAbortRef = useRef(null);
 
   function isMessageLimitError(err) {
     return err instanceof ApiError && err.status === 429 && err.detail?.kind !== "voice";
@@ -40,38 +44,24 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
       micRef.current.stopRecording();
     }
 
+    // Cancel any speech still streaming from a previous call before reusing
+    // the shared <audio> element for this one.
+    speechAbortRef.current?.abort();
+    const controller = new AbortController();
+    speechAbortRef.current = controller;
+
     try {
-      const blob = await voice.speak(text, lang === "ar" ? "ar" : "en");
-      const url = URL.createObjectURL(blob);
+      const response = await voice.speak(text, lang === "ar" ? "ar" : "en");
       if (audioRef.current) {
-        audioRef.current.src = url;
-        await new Promise((resolve) => {
-          const audio = audioRef.current;
-          const cleanup = () => {
-            audio.removeEventListener("ended", onEnded);
-            audio.removeEventListener("error", onError);
-          };
-          const onEnded = () => {
-            cleanup();
-            resolve();
-          };
-          const onError = () => {
-            cleanup();
-            resolve();
-          };
-          audio.addEventListener("ended", onEnded);
-          audio.addEventListener("error", onError);
-          audio.play().catch((err) => {
-            console.warn("Autoplay blocked or audio play error:", err);
-            cleanup();
-            resolve();
-          });
-        });
+        await playStreamedAudio(audioRef.current, response, { signal: controller.signal });
       }
     } catch (err) {
       console.warn("Speech synthesis error:", err);
     } finally {
       if (index !== null) setSpeakingIndex(null);
+      if (speechAbortRef.current === controller) {
+        speechAbortRef.current = null;
+      }
     }
 
     if (autoArm) {
@@ -83,10 +73,7 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
     }
   }
 
-  useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    refreshUsage();
+  function startFreshConversation() {
     chat
       .start({ lesson_id: lesson ? lesson.id : null, difficulty, mode })
       .then((result) => {
@@ -102,8 +89,43 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
           setLimitReached(true);
         }
       });
+  }
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    refreshUsage();
+
+    // Drafts only ever exist for free-talk sessions — lesson mode always
+    // starts fresh. If a draft is found, hold off starting a new
+    // conversation until the learner picks resume vs. start fresh.
+    if (mode === "free_talk") {
+      chat
+        .getDraft()
+        .then((found) => {
+          if (found) {
+            setDraft(found);
+          } else {
+            startFreshConversation();
+          }
+        })
+        .catch(() => startFreshConversation());
+      return;
+    }
+
+    startFreshConversation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function handleResumeDraft() {
+    setMessages(draft?.messages || []);
+    setDraft(null);
+  }
+
+  function handleStartFresh() {
+    setDraft(null);
+    startFreshConversation();
+  }
 
   useEffect(() => {
     if (listRef.current) {
@@ -113,7 +135,7 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
 
   async function sendText(text) {
     const trimmed = text.trim();
-    if (!trimmed || sending) return;
+    if (!trimmed || sending || endingSession) return;
 
     if (micRef.current && micRef.current.isRecording()) {
       micRef.current.stopRecording();
@@ -137,14 +159,27 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
         return;
       }
       const corrections = result.corrections || [];
+      const updatedMistakes =
+        corrections.length > 0 ? [...mistakes, ...corrections] : mistakes;
       if (corrections.length > 0) {
-        setMistakes((prev) => [...prev, ...corrections]);
+        setMistakes(updatedMistakes);
       }
       const replyIndex = nextMessages.length;
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: result.reply, corrections },
-      ]);
+      const assistantMessage = { role: "assistant", content: result.reply, corrections };
+      const finalMessages = [...nextMessages, assistantMessage];
+      setMessages(finalMessages);
+
+      if (result.session_ending) {
+        // The model detected the learner is wrapping up — let the farewell
+        // finish speaking before leaving for the summary screen, since
+        // unmounting ChatView tears down the <audio> element and cuts the
+        // reply off mid-sentence.
+        setEndingSession(true);
+        await handleSpeak(replyIndex, result.reply, { autoArm: false });
+        onEndSession(finalMessages, updatedMistakes);
+        return;
+      }
+
       handleSpeak(replyIndex, result.reply, { autoArm: true });
     } catch (err) {
       // Leave the user message on screen; the send just failed silently —
@@ -165,6 +200,7 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
   }
 
   function handleEnd() {
+    if (endingSession) return;
     if (micRef.current && micRef.current.isRecording()) {
       micRef.current.stopRecording();
     }
@@ -179,7 +215,7 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
     <div className="chat-view">
       <div className="chat-view-header">
         <h2>{title}</h2>
-        <button type="button" className="btn" onClick={handleEnd}>
+        <button type="button" className="btn" onClick={handleEnd} disabled={endingSession}>
           {t("end_session_button")}
         </button>
       </div>
@@ -188,6 +224,20 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
         <span className="muted">
           {t("messages_today_caption", { used: usageToday.used, limit: usageToday.limit })}
         </span>
+      )}
+
+      {draft && (
+        <div className="draft-resume-banner">
+          <span>{t("resume_prompt_message")}</span>
+          <div className="draft-resume-actions">
+            <button type="button" className="btn btn-primary" onClick={handleResumeDraft}>
+              {t("resume_button")}
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={handleStartFresh}>
+              {t("start_fresh_button")}
+            </button>
+          </div>
+        </div>
       )}
 
       <div className="message-list" ref={listRef}>
@@ -216,6 +266,11 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
             </div>
           </div>
         ))}
+        {endingSession && (
+          <div className="message-row assistant">
+            <span className="system-note">{t("session_ending_notice")}</span>
+          </div>
+        )}
       </div>
 
       <audio ref={audioRef} hidden />
@@ -224,7 +279,7 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
         <MicButton
           ref={micRef}
           t={t}
-          disabled={sending || limitReached}
+          disabled={sending || limitReached || endingSession}
           onTranscribed={(text) => sendText(text)}
         />
         <input
@@ -232,9 +287,13 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={limitReached ? t("daily_limit_placeholder") : t("chat_input_placeholder")}
-          disabled={sending || limitReached}
+          disabled={sending || limitReached || endingSession}
         />
-        <button type="submit" className="send-btn" disabled={sending || limitReached || !input.trim()}>
+        <button
+          type="submit"
+          className="send-btn"
+          disabled={sending || limitReached || endingSession || !input.trim()}
+        >
           ➤
         </button>
       </form>
