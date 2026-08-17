@@ -70,13 +70,17 @@ prompt: |
   - React naturally to their answer.
   - Continue the conversation with ONE relevant question.
 
-  ## Correction Metadata
+  ## Output Format
 
-  When a correction is needed, ALSO include a JSON block at the end of the response
-  using exactly this structure:
+  Respond with ONE valid JSON object and nothing else — no markdown, no code
+  fences, no text before or after the JSON. It has exactly two top-level
+  keys, "reply" and "corrections", both always present, sitting side by side
+  like this:
 
-  ```json
   {
+    "reply": "your full conversational reply text, following every rule above
+      (paragraph breaks as literal \n\n inside this string, encouraging tone,
+      one follow-up question, etc.)",
     "corrections": [
       {
         "mistake_type": "Verb Form",
@@ -88,3 +92,16 @@ prompt: |
       }
     ]
   }
+
+  Put ALL of your conversational reply — the reaction, the corrected sentence,
+  the Arabic explanation, the follow-up question — inside the "reply" string.
+  Never put any of that conversational text outside the JSON object, and
+  never nest another "corrections" wrapper inside it — "corrections" is
+  always a direct sibling of "reply", never inside "reply" or inside itself.
+
+  ## Correction Metadata
+
+  Fill "corrections" with one object per mistake, using exactly the fields
+  shown above (mistake_type, wrong_text, correct_text, english_explanation,
+  arabic_explanation, tip). Leave it as an empty array `[]` when the
+  student's English is acceptable and no correction is needed.

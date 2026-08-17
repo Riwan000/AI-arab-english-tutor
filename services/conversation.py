@@ -32,8 +32,7 @@ def start_conversation(
         past_context=past_context,
     )
     raw = openrouter.chat_completion(messages)
-    corrections = grammar.extract_feedback(raw)
-    reply = grammar.strip_json_from_response(raw)
+    reply, corrections = grammar.parse_response(raw)
 
     return ChatResponse(reply=reply, corrections=corrections)
 
@@ -63,8 +62,7 @@ def send_message(
         past_context=past_context,
     )
     raw = openrouter.chat_completion(prompt_messages)
-    corrections = grammar.extract_feedback(raw)
-    reply = grammar.strip_json_from_response(raw)
+    reply, corrections = grammar.parse_response(raw)
 
     return ChatResponse(reply=reply, corrections=corrections)
 

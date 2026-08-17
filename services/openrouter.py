@@ -28,6 +28,7 @@ def chat_completion(messages: list[dict], model: str | None = None) -> str:
             json={
                 "model": model or DEFAULT_MODEL,
                 "messages": messages,
+                "response_format": {"type": "json_object"},
             },
             timeout=30.0,
         )
