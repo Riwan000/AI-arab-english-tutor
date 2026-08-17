@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { chat, voice } from "../api/client";
+import { ApiError, chat, usage, voice } from "../api/client";
 import CorrectionCard from "./CorrectionCard.jsx";
 import MicButton from "./MicButton.jsx";
 
@@ -9,12 +9,27 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState(null);
+  const [limitReached, setLimitReached] = useState(false);
+  const [usageToday, setUsageToday] = useState(null);
   const listRef = useRef(null);
   const audioRef = useRef(null);
   const micRef = useRef(null);
   const startedRef = useRef(false);
 
-  const isFreeTalk = mode === "free_talk";
+  function isMessageLimitError(err) {
+    return err instanceof ApiError && err.status === 429 && err.detail?.kind !== "voice";
+  }
+
+  function refreshUsage() {
+    usage
+      .today()
+      .then(({ messages_used, messages_limit }) =>
+        setUsageToday({ used: messages_used, limit: messages_limit })
+      )
+      .catch(() => {
+        // Usage caption is a nice-to-have — don't break the chat over it.
+      });
+  }
 
   async function handleSpeak(index, text, { autoArm = false } = {}) {
     if (!text) return;
@@ -59,7 +74,7 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
       if (index !== null) setSpeakingIndex(null);
     }
 
-    if (autoArm && isFreeTalk) {
+    if (autoArm) {
       setTimeout(() => {
         if (micRef.current && !sending) {
           micRef.current.startRecording();
@@ -71,18 +86,21 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
+    refreshUsage();
     chat
       .start({ lesson_id: lesson ? lesson.id : null, difficulty, mode })
       .then((result) => {
+        refreshUsage();
         if (!result.reply) return;
         setMessages([{ role: "assistant", content: result.reply, corrections: result.corrections || [] }]);
-        if (isFreeTalk) {
-          handleSpeak(0, result.reply, { autoArm: true });
-        }
+        handleSpeak(0, result.reply, { autoArm: true });
       })
-      .catch(() => {
+      .catch((err) => {
         // Backend unreachable / daily limit — leave the chat empty; the
         // learner can still end the (empty) session from here.
+        if (isMessageLimitError(err)) {
+          setLimitReached(true);
+        }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -113,6 +131,7 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
         mode,
         messages: nextMessages.map(({ role, content }) => ({ role, content })),
       });
+      refreshUsage();
       if (!result.reply) {
         setSending(false);
         return;
@@ -126,11 +145,15 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
         ...prev,
         { role: "assistant", content: result.reply, corrections },
       ]);
-      if (isFreeTalk) {
-        handleSpeak(replyIndex, result.reply, { autoArm: true });
+      handleSpeak(replyIndex, result.reply, { autoArm: true });
+    } catch (err) {
+      // Leave the user message on screen; the send just failed silently —
+      // unless it's the daily message-limit 429, which rolls the optimistic
+      // message back (mirrors Streamlit's st.session_state.messages.pop()).
+      if (isMessageLimitError(err)) {
+        setMessages((prev) => prev.slice(0, -1));
+        setLimitReached(true);
       }
-    } catch {
-      // Leave the user message on screen; the send just failed silently
     } finally {
       setSending(false);
     }
@@ -160,6 +183,12 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
           {t("end_session_button")}
         </button>
       </div>
+
+      {usageToday && (
+        <span className="muted">
+          {t("messages_today_caption", { used: usageToday.used, limit: usageToday.limit })}
+        </span>
+      )}
 
       <div className="message-list" ref={listRef}>
         {messages.map((msg, idx) => (
@@ -196,15 +225,20 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
       <audio ref={audioRef} hidden />
 
       <form className="composer" onSubmit={handleSubmit}>
-        <MicButton ref={micRef} t={t} disabled={sending} onTranscribed={(text) => sendText(text)} />
+        <MicButton
+          ref={micRef}
+          t={t}
+          disabled={sending || limitReached}
+          onTranscribed={(text) => sendText(text)}
+        />
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={t("chat_input_placeholder")}
-          disabled={sending}
+          placeholder={limitReached ? t("daily_limit_placeholder") : t("chat_input_placeholder")}
+          disabled={sending || limitReached}
         />
-        <button type="submit" className="send-btn" disabled={sending || !input.trim()}>
+        <button type="submit" className="send-btn" disabled={sending || limitReached || !input.trim()}>
           ➤
         </button>
       </form>
