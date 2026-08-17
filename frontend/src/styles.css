@@ -52,9 +52,10 @@ textarea {
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* ---- header ---- */
@@ -140,6 +141,8 @@ textarea {
   align-items: center;
   padding: 2rem 1rem;
   width: 100%;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .card {
