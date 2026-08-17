@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+import psycopg
 from slowapi.errors import RateLimitExceeded
 
 from api.config import get_settings
@@ -22,23 +23,29 @@ async def lifespan(app: FastAPI):
 
     import services.database as database
     import services.openrouter as openrouter
-    import services.voice as voice
+    import services.voice as voice_service
 
-    database.DB_PATH = __import__("pathlib").Path(settings.database_path)
     database.RETENTION_DAYS = settings.retention_days
     openrouter.OPENROUTER_API_KEY = settings.openrouter_api_key
     openrouter.OPENROUTER_BASE_URL = settings.openrouter_base_url
     openrouter.DEFAULT_MODEL = settings.default_model
-    voice.DEEPGRAM_API_KEY = settings.deepgram_api_key
+    voice_service.ELEVENLABS_API_KEY = settings.elevenlabs_api_key
+    voice_service.client = voice_service.build_client(settings.elevenlabs_api_key)
 
     try:
-        database.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        database.open_pool()
         get_session_repository().purge_old(settings.retention_days)
         database.purge_old_auth_attempts()
-    except OSError:
-        pass  # DB unavailable at startup — health check should still pass
+    except (OSError, psycopg.OperationalError):
+        # DB unavailable at startup — health check should still pass.
+        # psycopg raises OperationalError (and psycopg_pool's PoolTimeout,
+        # a subclass of it) when Postgres is unreachable.
+        pass
 
-    yield
+    try:
+        yield
+    finally:
+        database.close_pool()
 
 
 app = FastAPI(

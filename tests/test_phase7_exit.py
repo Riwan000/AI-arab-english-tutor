@@ -1,4 +1,4 @@
-"""Phase 7 exit verification — issues #135-#138.
+﻿"""Phase 7 exit verification â€” issues #135-#138.
 
 HTTP-level regression coverage on top of the existing service/repository unit
 tests (test_usage_service.py, test_usage_repository.py,
@@ -20,15 +20,13 @@ os.environ.setdefault("JWT_SECRET_KEY", SECRET)
 
 import api_client  # noqa: E402
 from api.main import app  # noqa: E402 (secret must be set before import)
-from services import database as db  # noqa: E402
 from services import openrouter  # noqa: E402
 
 CHAT_URL = "http://localhost:8000/api/v1/chat/message"
 
 
 @pytest.fixture
-def scoped_client(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "phase7.db")
+def scoped_client(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", SECRET)
     monkeypatch.setenv("DAILY_MESSAGE_LIMIT", "2")
     monkeypatch.setattr(openrouter, "chat_completion", lambda messages: "Great job!")
@@ -104,7 +102,7 @@ def test_hitting_the_limit_mid_conversation_blocks_the_frontend_gracefully(
     blocked = _send(scoped_client, headers, "should be blocked")
     assert blocked.status_code == 429, blocked.text
 
-    # Replay the real backend response through api_client's real error path —
+    # Replay the real backend response through api_client's real error path â€”
     # the same path a live Streamlit session hits when send_message() 429s.
     request = httpx.Request("POST", CHAT_URL)
     response = httpx.Response(429, json=blocked.json(), request=request)

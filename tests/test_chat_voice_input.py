@@ -71,7 +71,7 @@ def test_voice_input_does_nothing_when_recorder_returns_nothing(monkeypatch):
 def test_voice_input_transcribes_and_reuses_the_same_send_message_path(monkeypatch):
     st = _fake_st()
     st.audio_input.return_value = _FakeUploadedFile(b"raw-audio", file_id="file-1")
-    transcribe = MagicMock(return_value="hello teacher")
+    transcribe = MagicMock(return_value={"text": "hello teacher", "language": "en"})
     monkeypatch.setattr(chat_module.api_client, "transcribe_audio", transcribe)
     handle_user_message = MagicMock()
     monkeypatch.setattr(chat_module, "_handle_user_message", handle_user_message)
@@ -123,22 +123,25 @@ def test_render_chat_skips_the_recorder_once_the_daily_limit_is_hit():
     st.audio_input.assert_not_called()
 
 
-def test_speak_reply_true_stores_audio_bytes_on_the_assistant_message(monkeypatch):
+def test_speak_reply_true_marks_the_message_as_needing_audio(monkeypatch):
     st = _fake_st()
     monkeypatch.setattr(
         chat_module.api_client,
         "send_message",
         lambda **kwargs: {"reply": "Good job!", "corrections": []},
     )
-    monkeypatch.setattr(
-        chat_module.api_client, "synthesize_speech", lambda text, lang: b"mp3-bytes"
-    )
+    synthesize_speech = MagicMock(return_value=b"mp3-bytes")
+    monkeypatch.setattr(chat_module.api_client, "synthesize_speech", synthesize_speech)
 
     with patch.object(chat_module, "st", st):
         with pytest.raises(_Rerun):
             chat_module._handle_user_message("hi", None, speak_reply=True)
 
-    assert st.session_state["messages"][-1]["audio_reply"] == b"mp3-bytes"
+    assert st.session_state["messages"][-1]["needs_audio"] is True
+    # Synthesis is deferred to render time (see the audio-autoplay tests
+    # below), not done while handling the message — that's the whole point:
+    # the reply text must reach the screen before TTS starts.
+    synthesize_speech.assert_not_called()
 
 
 def test_speak_reply_false_never_calls_synthesize_speech(monkeypatch):
@@ -156,7 +159,7 @@ def test_speak_reply_false_never_calls_synthesize_speech(monkeypatch):
             chat_module._handle_user_message("hi", None)
 
     synthesize_speech.assert_not_called()
-    assert "audio_reply" not in st.session_state["messages"][-1]
+    assert st.session_state["messages"][-1]["needs_audio"] is False
 
 
 def test_audio_reply_autoplays_only_once_across_reruns():
@@ -164,29 +167,39 @@ def test_audio_reply_autoplays_only_once_across_reruns():
     on a later, unrelated rerun (issue #157: only the newest reply plays)."""
     st = _fake_st(
         messages=[
-            {"role": "assistant", "content": "Hi", "audio_reply": b"old-audio"},
+            {"role": "assistant", "content": "Hi", "needs_audio": True},
         ],
         _last_played_audio_index=0,
     )
+    synthesize_speech = MagicMock(return_value=b"old-audio")
 
-    with patch.object(chat_module, "st", st):
+    with patch.object(chat_module, "st", st), patch.object(
+        chat_module.api_client, "synthesize_speech", synthesize_speech
+    ):
         chat_module.render_chat()
 
     st.audio.assert_not_called()
+    synthesize_speech.assert_not_called()
 
 
 def test_new_audio_reply_autoplays_and_advances_the_played_index():
     st = _fake_st(
         messages=[
-            {"role": "assistant", "content": "Hi", "audio_reply": b"old-audio"},
+            {"role": "assistant", "content": "Hi", "needs_audio": True},
             {"role": "user", "content": "hello"},
-            {"role": "assistant", "content": "Great!", "audio_reply": b"new-audio"},
+            {"role": "assistant", "content": "Great!", "needs_audio": True},
         ],
         _last_played_audio_index=0,
     )
+    synthesize_speech = MagicMock(return_value=b"new-audio")
 
-    with patch.object(chat_module, "st", st):
+    with patch.object(chat_module, "st", st), patch.object(
+        chat_module.api_client, "synthesize_speech", synthesize_speech
+    ):
         chat_module.render_chat()
 
+    # Only the new message (idx 2) is synthesized — the already-played one
+    # (idx 0) is skipped entirely, not just left unplayed.
+    synthesize_speech.assert_called_once_with("Great!", "en")
     st.audio.assert_called_once_with(b"new-audio", autoplay=True)
     assert st.session_state["_last_played_audio_index"] == 2

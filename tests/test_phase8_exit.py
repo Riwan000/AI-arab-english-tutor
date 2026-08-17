@@ -105,10 +105,15 @@ RTL_STYLE_CALL_RE = re.compile(r"""i18n\.rtl_style\(\s*(?:'([^']*)'|"([^"]*)")""
 # Pure-chrome screens: pre-existing scoped RTL from 8.6, plus auth/mode-picker
 # chrome completed as part of the #145/#146 sweep (see components/auth_view.py,
 # components/mode_picker.py).
+#
+# components/correction_card.py is deliberately absent: its listen button and
+# the RTL styling that only ever existed to support that button's Arabic
+# explanation block were both removed together (the card now renders plain
+# markdown), so it no longer carries any RTL CSS of its own. RTL support is
+# unaffected everywhere else -- it remains scoped to the files below.
 RTL_SCOPED_FILES = (
     "components/sidebar.py",
     "components/summary.py",
-    "components/correction_card.py",
     "components/auth_view.py",
     "components/mode_picker.py",
 )
@@ -159,12 +164,11 @@ def test_no_hardcoded_english_chrome_strings_remain():
 
 
 def test_rtl_css_is_present_and_scoped_in_arabic_chrome_screens():
-    """Issue #145 — the five pure-Arabic-chrome screens carry scoped RTL CSS.
+    """Issue #145 — the pure-Arabic-chrome screens carry scoped RTL CSS.
 
-    RTL support comes either as a literal `direction: rtl` CSS string (e.g.
-    correction_card.py's always-RTL arabic_explanation block) or as a call to
-    `i18n.rtl_style(selector)` (the app-language-aware screens) — either way
-    it must target a specific selector, never the whole page.
+    RTL support comes either as a literal `direction: rtl` CSS string or as a
+    call to `i18n.rtl_style(selector)` (the app-language-aware screens) —
+    either way it must target a specific selector, never the whole page.
 
     The per-selector checks below run against `i18n.rtl_style()`'s actual
     return value, not just the selector text parsed out of the caller's
@@ -238,8 +242,8 @@ def main() -> int:
     print("  [x] RTL CSS is scoped to each screen's own container, never applied app-wide")
     print("  [x] Chat bubbles, lesson examples/tips, and app.py's warning stay LTR")
     print("  [ ] Manual: streamlit run app.py, visually confirm Arabic text renders")
-    print("      right-to-left and right-aligned in the sidebar/summary/correction-card/")
-    print("      auth/mode-picker screens, and that chat bubbles + English lesson content")
+    print("      right-to-left and right-aligned in the sidebar/summary/auth/mode-picker")
+    print("      screens, and that chat bubbles + English lesson content")
     print("      still read left-to-right (docs §I frontend bullet)")
     print("Phase 8 exit verification (issues #145-#146): OK")
     return 0

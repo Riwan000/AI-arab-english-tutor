@@ -21,16 +21,19 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     default_model: str = "openai/gpt-4.1"
-    deepgram_api_key: str = ""
-    database_path: str = "database/english_tutor.db"
+    elevenlabs_api_key: str = ""
+    # No default: the Postgres connection string legitimately differs between
+    # local (Supabase CLI stack) and production (Supabase pooler), so it must
+    # come from the environment and fail fast when it is missing.
+    database_url: str = Field(..., min_length=1)
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:8501"]
     )
     retention_days: int = 5
     api_host: str = "0.0.0.0"
     api_port: int = 8000
-    daily_message_limit: int = 20
-    daily_voice_call_limit: int = 20
+    daily_message_limit: int = 100
+    daily_voice_call_limit: int = 100
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -46,9 +49,9 @@ class Settings(BaseSettings):
         os.environ["OPENROUTER_API_KEY"] = self.openrouter_api_key
         os.environ["OPENROUTER_BASE_URL"] = self.openrouter_base_url
         os.environ["DEFAULT_MODEL"] = self.default_model
-        os.environ["DEEPGRAM_API_KEY"] = self.deepgram_api_key
-        os.environ["DATABASE_PATH"] = self.database_path
+        os.environ["DATABASE_URL"] = self.database_url
         os.environ["RETENTION_DAYS"] = str(self.retention_days)
+        os.environ["ELEVENLABS_API_KEY"] = self.elevenlabs_api_key
 
 
 @lru_cache

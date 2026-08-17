@@ -3,6 +3,8 @@
 import httpx
 import streamlit as st
 
+from api.schemas.voice import TranscriptionResult
+
 DEFAULT_TIMEOUT = 10.0
 CHAT_TIMEOUT = 35.0
 VOICE_TIMEOUT = 35.0
@@ -97,18 +99,30 @@ def _show_error(message: str) -> None:
 def _handle_response_error(exc: httpx.HTTPStatusError) -> None:
     """Show the error, unless this is a stale session — then clear it for app.py to catch.
 
-    A 401 only means "session expired" when we thought we had one (`_auth_token`
-    was set). A 401 with no token set is a normal login/signup credential
-    failure and must surface its own message instead.
+    A 401 with 'Not authenticated' (or when a token/user session was active on a protected endpoint)
+    means the session expired or token was rejected. A 401 with 'Invalid email or password'
+    is a plain wrong-password reply from the login form.
     """
-    if exc.response.status_code == 401 and _auth_token is not None:
+    detail = _response_detail(exc.response)
+    detail_str = _error_message(detail)
+
+    is_login_failure = detail_str == "Invalid email or password"
+    is_session_expired = (
+        exc.response.status_code == 401
+        and (_auth_token is not None or bool(st.session_state.get("user")) or detail_str == "Not authenticated")
+        and not is_login_failure
+    )
+
+    if is_session_expired:
         set_auth_token(None)
+        if "auth_token" in st.session_state:
+            st.session_state["auth_token"] = None
         st.session_state["force_logout"] = True
         return
-    detail = _response_detail(exc.response)
+
     if _is_daily_limit_detail(exc.response.status_code, detail):
         st.session_state["daily_limit_reached"] = True
-    _show_error(_error_message(detail))
+    _show_error(detail_str)
 
 
 def _request_get(
@@ -312,7 +326,10 @@ def get_usage_today() -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def transcribe_audio(audio_bytes: bytes, mimetype: str = "audio/wav") -> str | None:
+def transcribe_audio(
+    audio_bytes: bytes,
+    mimetype: str = "audio/wav",
+) -> TranscriptionResult | None:
     data = _request_post_multipart(
         "/api/v1/voice/transcribe",
         files={"audio": ("audio", audio_bytes, mimetype)},
@@ -320,7 +337,23 @@ def transcribe_audio(audio_bytes: bytes, mimetype: str = "audio/wav") -> str | N
         fallback=None,
         timeout_message=VOICE_TIMEOUT_MESSAGE,
     )
-    return data.get("text") if isinstance(data, dict) else None
+
+    if not isinstance(data, dict):
+        return None
+
+    text = data.get("text")
+    language = data.get("language")
+
+    if not isinstance(text, str):
+        return None
+
+    if language not in {"en", "ar"}:
+        language = "en"
+
+    return {
+        "text": text,
+        "language": language,
+    }
 
 
 def synthesize_speech(text: str, language: str = "en") -> bytes | None:

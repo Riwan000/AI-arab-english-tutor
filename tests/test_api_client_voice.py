@@ -11,12 +11,12 @@ import api_client
 def test_transcribe_audio_sends_multipart_file(mock_post):
     response = MagicMock()
     response.raise_for_status = MagicMock()
-    response.json.return_value = {"text": "hello there"}
+    response.json.return_value = {"text": "hello there", "language": "en"}
     mock_post.return_value = response
 
     result = api_client.transcribe_audio(b"\x00\x01fake-wav", mimetype="audio/wav")
 
-    assert result == "hello there"
+    assert result == {"text": "hello there", "language": "en"}
     _, kwargs = mock_post.call_args
     assert "files" in kwargs
     assert "json" not in kwargs

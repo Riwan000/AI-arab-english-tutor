@@ -1,4 +1,4 @@
-"""Phase 6 exit verification — issues #121-#124.
+﻿"""Phase 6 exit verification â€” issues #121-#124.
 
 HTTP-level regression coverage on top of the existing service/repository unit
 tests: these exercise the real FastAPI routes so a regression at the request
@@ -16,12 +16,10 @@ os.environ.setdefault("JWT_SECRET_KEY", SECRET)
 
 from api.main import app  # noqa: E402 (secret must be set before import)
 from services import conversation  # noqa: E402
-from services import database as db  # noqa: E402
 
 
 @pytest.fixture
-def scoped_client(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "phase6.db")
+def scoped_client(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", SECRET)
 
     from api.config import get_settings
@@ -32,8 +30,8 @@ def scoped_client(tmp_path, monkeypatch):
 
     monkeypatch.setattr(limiter, "enabled", False)
 
-    # Deliberately not a context manager: the lifespan would repoint
-    # database.DB_PATH at the real database file.
+    # Deliberately not a context manager: running the lifespan would re-read
+    # settings and re-open the connection pool the conftest fixture manages.
     yield TestClient(app)
 
     get_settings.cache_clear()
@@ -150,7 +148,7 @@ def test_free_talk_journey_from_start_to_saved_summary(scoped_client, monkeypatc
             '{"corrections": [{"mistake_type": "verb_tense", '
             '"wrong_text": "I go", "correct_text": "I went", '
             '"english_explanation": "Use past tense for a completed action.", '
-            '"arabic_explanation": "استخدم الماضي للفعل المكتمل."}]}\n'
+            '"arabic_explanation": "Ø§Ø³ØªØ®Ø¯Ù… Ø§Ù„Ù…Ø§Ø¶ÙŠ Ù„Ù„ÙØ¹Ù„ Ø§Ù„Ù…ÙƒØªÙ…Ù„."}]}\n'
             "```"
         )
 

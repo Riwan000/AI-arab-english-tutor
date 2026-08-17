@@ -33,6 +33,10 @@ class SessionRepository:
     def get_summary(self, conversation_id: int, *, user_id: int) -> dict | None:
         return database.get_session_summary(conversation_id, user_id=user_id)
 
+    def get_user_learning_profile(self, user_id: int, limit: int = 5) -> dict:
+        return database.get_user_learning_profile(user_id, session_limit=limit)
+
+
     def purge_old(self, retention_days: int | None = None) -> int:
         days = retention_days if retention_days is not None else database.RETENTION_DAYS
         return database.purge_old_conversations(retention_days=days)

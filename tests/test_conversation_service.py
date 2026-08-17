@@ -38,7 +38,7 @@ def test_send_message_free_talk_skips_lesson_lookup(monkeypatch):
 def test_start_conversation_passes_difficulty_and_mode_to_prompt_builder(monkeypatch):
     captured = {}
 
-    def fake_build_messages(lesson, history, start=False, difficulty="beginner", mode="lesson"):
+    def fake_build_messages(lesson, history, start=False, difficulty="beginner", mode="lesson", **kwargs):
         captured["lesson"] = lesson
         captured["difficulty"] = difficulty
         captured["mode"] = mode
@@ -55,11 +55,12 @@ def test_start_conversation_passes_difficulty_and_mode_to_prompt_builder(monkeyp
 def test_send_message_defaults_match_previous_lesson_mode_behavior(monkeypatch):
     captured = {}
 
-    def fake_build_messages(lesson, history, start=False, difficulty="beginner", mode="lesson"):
+    def fake_build_messages(lesson, history, start=False, difficulty="beginner", mode="lesson", **kwargs):
         captured["lesson_title"] = lesson["title"] if lesson else None
         captured["difficulty"] = difficulty
         captured["mode"] = mode
         return [{"role": "system", "content": "x"}]
+
 
     monkeypatch.setattr(conversation, "build_messages", fake_build_messages)
     monkeypatch.setattr(openrouter, "chat_completion", lambda messages: "ok")

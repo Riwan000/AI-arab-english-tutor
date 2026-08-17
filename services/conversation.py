@@ -4,7 +4,7 @@ import os
 
 from models.conversation import ChatResponse, SessionSummary
 from models.feedback import GrammarFeedback
-from prompts.prompt_builder import build_messages
+from prompts.prompt_builder import build_messages, format_past_context
 from repositories.session_repo import SessionRepository
 from services import grammar, lessons, openrouter, scoring
 
@@ -13,11 +13,24 @@ def start_conversation(
     lesson_id: str | None,
     difficulty: str = "beginner",
     mode: str = "lesson",
+    user_id: int | None = None,
 ) -> ChatResponse:
     """Build start prompt, call LLM, return clean reply. Loads a lesson only in lesson mode."""
     lesson_dict = _resolve_lesson(lesson_id, mode)
 
-    messages = build_messages(lesson_dict, [], start=True, difficulty=difficulty, mode=mode)
+    past_context = None
+    if mode == "free_talk" and user_id is not None:
+        past_profile = SessionRepository().get_user_learning_profile(user_id)
+        past_context = format_past_context(past_profile)
+
+    messages = build_messages(
+        lesson_dict,
+        [],
+        start=True,
+        difficulty=difficulty,
+        mode=mode,
+        past_context=past_context,
+    )
     raw = openrouter.chat_completion(messages)
     corrections = grammar.extract_feedback(raw)
     reply = grammar.strip_json_from_response(raw)
@@ -31,17 +44,30 @@ def send_message(
     user_text: str,
     difficulty: str = "beginner",
     mode: str = "lesson",
+    user_id: int | None = None,
 ) -> ChatResponse:
     """Append user message, call LLM, parse corrections, return clean reply."""
     lesson_dict = _resolve_lesson(lesson_id, mode)
 
+    past_context = None
+    if mode == "free_talk" and user_id is not None:
+        past_profile = SessionRepository().get_user_learning_profile(user_id)
+        past_context = format_past_context(past_profile)
+
     history = [*messages, {"role": "user", "content": user_text}]
-    prompt_messages = build_messages(lesson_dict, history, difficulty=difficulty, mode=mode)
+    prompt_messages = build_messages(
+        lesson_dict,
+        history,
+        difficulty=difficulty,
+        mode=mode,
+        past_context=past_context,
+    )
     raw = openrouter.chat_completion(prompt_messages)
     corrections = grammar.extract_feedback(raw)
     reply = grammar.strip_json_from_response(raw)
 
     return ChatResponse(reply=reply, corrections=corrections)
+
 
 
 def _resolve_lesson(lesson_id: str | None, mode: str) -> dict | None:

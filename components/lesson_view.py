@@ -19,28 +19,36 @@ def render_lesson_view() -> None:
 
     st.session_state.lesson = lesson
 
-    st.header(lesson["title"])
-    st.write(lesson["description"])
+    with st.container(border=True, key="lesson-card"):
+        difficulty = st.session_state.get("difficulty")
+        if difficulty:
+            st.markdown(
+                f'<span class="lesson-difficulty-badge">{i18n.difficulty_label(difficulty)}</span>',
+                unsafe_allow_html=True,
+            )
 
-    st.subheader(i18n.t("examples_header"))
-    for example in lesson.get("examples", []):
-        st.code(example, language=None)
+        st.header(lesson["title"])
+        st.write(lesson["description"])
 
-    if lesson.get("negative_form"):
-        st.subheader(i18n.t("negative_form_header"))
-        for item in lesson["negative_form"]:
-            st.code(item, language=None)
+        st.subheader(i18n.t("examples_header"))
+        for example in lesson.get("examples", []):
+            st.code(example, language=None)
 
-    if lesson.get("question_form"):
-        st.subheader(i18n.t("question_form_header"))
-        for item in lesson["question_form"]:
-            st.code(item, language=None)
+        if lesson.get("negative_form"):
+            st.subheader(i18n.t("negative_form_header"))
+            for item in lesson["negative_form"]:
+                st.code(item, language=None)
 
-    if lesson.get("tips"):
-        st.subheader(i18n.t("tips_header"))
-        for tip in lesson["tips"]:
-            st.info(tip)
+        if lesson.get("question_form"):
+            st.subheader(i18n.t("question_form_header"))
+            for item in lesson["question_form"]:
+                st.code(item, language=None)
 
-    if st.button(i18n.t("start_training_button"), type="primary"):
-        st.session_state.conversation_started = True
-        st.rerun()
+        if lesson.get("tips"):
+            st.subheader(i18n.t("tips_header"))
+            for tip in lesson["tips"]:
+                st.info(tip)
+
+        if st.button(i18n.t("start_training_button"), type="primary", use_container_width=True):
+            st.session_state.conversation_started = True
+            st.rerun()

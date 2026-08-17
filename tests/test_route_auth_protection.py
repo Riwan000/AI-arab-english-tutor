@@ -76,8 +76,7 @@ def test_public_route_does_not_require_auth(path):
 
 
 @pytest.fixture
-def scoped_client(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "sessions.db")
+def scoped_client(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", SECRET)
 
     from api.config import get_settings
@@ -90,8 +89,8 @@ def scoped_client(tmp_path, monkeypatch):
     # keyed on the same TestClient IP; rate limiting has its own tests.
     monkeypatch.setattr(limiter, "enabled", False)
 
-    # Deliberately not a context manager: the lifespan would repoint
-    # database.DB_PATH at the real database file.
+    # Deliberately not a context manager: running the lifespan would re-read
+    # settings and re-open the connection pool the conftest fixture manages.
     yield TestClient(app)
 
     get_settings.cache_clear()
@@ -179,9 +178,8 @@ def test_create_session_stores_the_authenticated_owner(scoped_client):
 
     assert response.status_code == 201
     session_id = response.json()["id"]
-    conn = db.get_connection()
-    row = conn.execute(
-        "SELECT user_id FROM conversations WHERE id = ?", (session_id,)
-    ).fetchone()
-    conn.close()
+    with db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT user_id FROM conversations WHERE id = %s", (session_id,)
+        ).fetchone()
     assert row["user_id"] == owner_id

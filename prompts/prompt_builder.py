@@ -18,15 +18,45 @@ FREE_TALK_START_MESSAGE = (
 MAX_HISTORY_MESSAGES = 20
 
 
+def format_past_context(past_profile: dict | None) -> str:
+    """Format past session history and top mistake patterns into prompt text."""
+    if not past_profile:
+        return "No prior session history recorded."
+
+    sessions = past_profile.get("recent_sessions", [])
+    top_mistakes = past_profile.get("top_mistakes", [])
+
+    if not sessions and not top_mistakes:
+        return "No prior session history recorded."
+
+    parts = []
+
+    if sessions:
+        parts.append("Recent Sessions Completed:")
+        for s in sessions:
+            title = s.get("lesson_title", "Session")
+            score = f"{s['grammar_score']}%" if s.get("grammar_score") is not None else "N/A"
+            rec = f" — Recommendation: {s['recommendation']}" if s.get("recommendation") else ""
+            parts.append(f"- {title} (Grammar Score: {score}){rec}")
+
+    if top_mistakes:
+        parts.append("Frequent Weak Spots & Mistake Patterns to Reinforce:")
+        for m in top_mistakes:
+            parts.append(f"- {m}")
+
+    return "\n".join(parts)
+
+
 def build_messages(
     lesson: dict | None,
     history: list[dict],
     start: bool = False,
     difficulty: str = "beginner",
     mode: str = "lesson",
+    past_context: str | None = None,
 ) -> list[dict]:
     system_content = (
-        _build_free_talk_content(difficulty)
+        _build_free_talk_content(difficulty, past_context=past_context)
         if mode == "free_talk"
         else _build_system_content(lesson, difficulty)
     )
@@ -65,14 +95,18 @@ def _build_system_content(lesson: dict, difficulty: str) -> str:
     return f"{get_system_prompt()}\n\n{lesson_context}\n\n{difficulty_block}"
 
 
-def _build_free_talk_content(difficulty: str) -> str:
+def _build_free_talk_content(difficulty: str, past_context: str | None = None) -> str:
     template = get_free_talk_context_template()
+
+    ctx = past_context if past_context else "No prior session history recorded."
 
     free_talk_context = template.format(
         student_level="A1–A2 beginner",
         native_language="Arabic",
+        past_context=ctx,
     )
 
     difficulty_block = get_difficulty_block(difficulty)
 
     return f"{get_system_prompt()}\n\n{free_talk_context}\n\n{difficulty_block}"
+

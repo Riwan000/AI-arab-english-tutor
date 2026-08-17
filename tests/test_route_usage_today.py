@@ -1,4 +1,4 @@
-"""GET /api/v1/usage/today must reflect real per-user daily usage server-side."""
+﻿"""GET /api/v1/usage/today must reflect real per-user daily usage server-side."""
 
 import os
 
@@ -9,13 +9,11 @@ SECRET = "test-only-secret"
 os.environ.setdefault("JWT_SECRET_KEY", SECRET)
 
 from api.main import app  # noqa: E402 (secret must be set before import)
-from services import database as db  # noqa: E402
 from services import openrouter  # noqa: E402
 
 
 @pytest.fixture
-def scoped_client(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "usage.db")
+def scoped_client(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", SECRET)
     monkeypatch.setenv("DAILY_MESSAGE_LIMIT", "5")
     monkeypatch.setenv("DAILY_VOICE_CALL_LIMIT", "3")

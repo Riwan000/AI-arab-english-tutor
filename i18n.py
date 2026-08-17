@@ -55,6 +55,7 @@ _STRINGS = {
         "chat_input_placeholder": "اكتب إجابتك بالإنجليزية...",
         "daily_limit_placeholder": "تم الوصول إلى الحد اليومي للرسائل",
         "voice_input_label": "🎙️ تحدث",
+        "text_fallback_label": "⌨️ مشكلة في الميكروفون؟ اكتب هنا بدلاً من ذلك",
         "lesson_load_error": "تعذر تحميل تفاصيل الدرس.",
         "examples_header": "أمثلة",
         "negative_form_header": "النفي",
@@ -73,7 +74,7 @@ _STRINGS = {
         "new_session_button": "بدء جلسة جديدة",
         "correction_title": "تقريبًا! تغيير بسيط واحد فقط.",
         "your_sentence_label": "❌ **جملتك:**",
-        "better_sentence_label": "✅ **الجملة الأفضل:**",
+        "better_sentence_label": "🟩 **الجملة الأفضل:**",
         "listen_button": "🔊 استمع",
         "tip_label": "💡 نصيحة:",
     },
@@ -122,6 +123,7 @@ _STRINGS = {
         "chat_input_placeholder": "Type your answer in English...",
         "daily_limit_placeholder": "Daily message limit reached",
         "voice_input_label": "🎙️ Speak",
+        "text_fallback_label": "⌨️ Mic trouble? Type here instead",
         "lesson_load_error": "Couldn't load lesson details.",
         "examples_header": "Examples",
         "negative_form_header": "Negative form",
@@ -140,7 +142,7 @@ _STRINGS = {
         "new_session_button": "Start a new session",
         "correction_title": "Almost! Just one small change.",
         "your_sentence_label": "❌ **Your sentence:**",
-        "better_sentence_label": "✅ **Better sentence:**",
+        "better_sentence_label": "🟩 **Better sentence:**",
         "listen_button": "🔊 Listen",
         "tip_label": "💡 Tip:",
     },
@@ -180,6 +182,9 @@ def difficulty_label(difficulty: str) -> str:
 
 
 def rtl_style(selector: str) -> str:
+    # Arabic typography doesn't need a font-family override here: config.toml's
+    # theme.font/headingFont list Cairo as a fallback after the Latin faces, so
+    # the browser already swaps to it per-glyph for Arabic text everywhere.
     direction = "rtl" if is_rtl() else "ltr"
     text_align = "right" if is_rtl() else "left"
     return f"<style>{selector} {{ direction: {direction}; text-align: {text_align}; }}</style>"

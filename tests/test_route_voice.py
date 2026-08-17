@@ -1,4 +1,4 @@
-"""POST /voice/transcribe and /voice/speak: auth-protected, metered, Deepgram-backed."""
+﻿"""POST /voice/transcribe and /voice/speak: auth-protected, metered, ElevenLabs-backed."""
 
 import os
 
@@ -9,17 +9,15 @@ SECRET = "test-only-secret"
 os.environ.setdefault("JWT_SECRET_KEY", SECRET)
 
 from api.main import app  # noqa: E402 (secret must be set before import)
-from services import database as db  # noqa: E402
 from services import voice  # noqa: E402
 from services.errors import VoiceSynthesisError, VoiceTranscriptionError  # noqa: E402
 
 
 @pytest.fixture
-def scoped_client(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "voice.db")
+def scoped_client(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", SECRET)
-    monkeypatch.setattr(voice, "transcribe_audio", lambda audio_bytes, mimetype: "hello there")
-    monkeypatch.setattr(voice, "synthesize_speech", lambda text, voice: b"fake-audio-bytes")
+    monkeypatch.setattr(voice, "transcribe_audio", lambda audio_bytes, mimetype: ("hello there", "en"))
+    monkeypatch.setattr(voice, "synthesize_speech", lambda text, language: b"fake-audio-bytes")
 
     from api.config import get_settings
 
@@ -56,7 +54,7 @@ def test_transcribe_requires_authentication(scoped_client):
     assert response.status_code == 401
 
 
-def test_transcribe_returns_the_deepgram_transcript(scoped_client):
+def test_transcribe_returns_the_transcript_and_detected_language(scoped_client):
     headers = _signup(scoped_client)
 
     response = scoped_client.post(
@@ -66,7 +64,7 @@ def test_transcribe_returns_the_deepgram_transcript(scoped_client):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"text": "hello there"}
+    assert response.json() == {"text": "hello there", "language": "en"}
 
 
 def test_transcribe_rejects_uploads_over_the_size_cap(scoped_client, monkeypatch):
@@ -113,6 +111,10 @@ def test_transcribe_rejecting_an_oversized_upload_does_not_burn_the_daily_quota(
 def test_speak_rejecting_an_unsupported_language_does_not_burn_the_daily_quota(
     scoped_client, monkeypatch
 ):
+    """SpeakRequest.language is a Literal["en", "ar"], so anything else is
+    rejected by Pydantic validation (422) before the route body ever runs --
+    unlike the old dead `if body.language not in {...}: raise ValueError`
+    guard removed from api/routes/voice.py, this never reaches usage metering."""
     headers = _signup(scoped_client)
     monkeypatch.setenv("DAILY_VOICE_CALL_LIMIT", "1")
 
@@ -123,9 +125,9 @@ def test_speak_rejecting_an_unsupported_language_does_not_burn_the_daily_quota(
     rejected = scoped_client.post(
         "/api/v1/voice/speak",
         headers=headers,
-        json={"text": "مرحبا", "language": "ar"},
+        json={"text": "bonjour", "language": "fr"},
     )
-    assert rejected.status_code == 400
+    assert rejected.status_code == 422
 
     accepted = scoped_client.post(
         "/api/v1/voice/speak",
@@ -174,16 +176,17 @@ def test_speak_returns_audio_bytes(scoped_client):
     assert response.headers["content-type"] == "audio/mpeg"
 
 
-def test_speak_rejects_arabic_since_aura_has_no_arabic_voice_yet(scoped_client):
+def test_speak_succeeds_for_arabic_since_elevenlabs_has_multilingual_voices(scoped_client):
     headers = _signup(scoped_client)
 
     response = scoped_client.post(
         "/api/v1/voice/speak",
         headers=headers,
-        json={"text": "مرحبا", "language": "ar"},
+        json={"text": "Ù…Ø±Ø­Ø¨Ø§", "language": "ar"},
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 200
+    assert response.content == b"fake-audio-bytes"
 
 
 def test_speak_rejects_text_over_the_length_cap(scoped_client):
@@ -192,7 +195,19 @@ def test_speak_rejects_text_over_the_length_cap(scoped_client):
     response = scoped_client.post(
         "/api/v1/voice/speak",
         headers=headers,
-        json={"text": "a" * 501, "language": "en"},
+        json={"text": "a" * 3001, "language": "en"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_speak_rejects_empty_text(scoped_client):
+    headers = _signup(scoped_client)
+
+    response = scoped_client.post(
+        "/api/v1/voice/speak",
+        headers=headers,
+        json={"text": "", "language": "en"},
     )
 
     assert response.status_code == 422
@@ -201,7 +216,7 @@ def test_speak_rejects_text_over_the_length_cap(scoped_client):
 def test_speak_propagates_deepgram_failures_as_502(scoped_client, monkeypatch):
     headers = _signup(scoped_client)
 
-    def raise_error(text, voice):
+    def raise_error(text, language):
         raise VoiceSynthesisError()
 
     monkeypatch.setattr(voice, "synthesize_speech", raise_error)

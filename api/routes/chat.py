@@ -17,7 +17,9 @@ def start_chat(
     current_user: User = Depends(get_current_user),
 ) -> ChatResponse:
     usage.check_and_increment(current_user.id)
-    return conversation.start_conversation(body.lesson_id, body.difficulty, body.mode)
+    return conversation.start_conversation(
+        body.lesson_id, body.difficulty, body.mode, user_id=current_user.id
+    )
 
 
 @router.post("/message", response_model=ChatResponse)
@@ -27,4 +29,12 @@ def send_chat_message(
 ) -> ChatResponse:
     usage.check_and_increment(current_user.id)
     history, user_text = body.split_history_and_user_text()
-    return conversation.send_message(body.lesson_id, history, user_text, body.difficulty, body.mode)
+    return conversation.send_message(
+        body.lesson_id,
+        history,
+        user_text,
+        body.difficulty,
+        body.mode,
+        user_id=current_user.id,
+    )
+

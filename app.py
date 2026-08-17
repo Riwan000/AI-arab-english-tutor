@@ -11,6 +11,7 @@ from components.lesson_view import render_lesson_view
 from components.mode_picker import render_mode_picker
 from components.sidebar import render_sidebar
 from components.summary import render_summary
+from components.theme import render_global_styles
 
 
 def init_session_state() -> None:
@@ -25,6 +26,7 @@ def init_session_state() -> None:
         "session_persisted": False,
         "saved_conversation_id": None,
         "user": None,
+        "auth_token": None,
         "mode": None,
         "difficulty": None,
         "daily_limit_reached": False,
@@ -46,10 +48,11 @@ def main() -> None:
         page_icon="📚",
         layout="wide",
     )
+    render_global_styles()
 
     init_session_state()
     cookie_manager = get_cookie_manager()
-    token = cookie_manager.get("auth_token")
+    token = cookie_manager.get("auth_token") or st.session_state.get("auth_token")
 
     if "app_language" not in st.session_state:
         cookie_language = cookie_manager.get("app_language")
@@ -59,12 +62,14 @@ def main() -> None:
 
     if st.session_state.get("force_logout"):
         api_client.set_auth_token(None)
-        if token:
+        st.session_state.auth_token = None
+        if cookie_manager.get("auth_token"):
             cookie_manager.delete("auth_token")
         st.session_state.clear()
         st.rerun()
 
     if token:
+        st.session_state.auth_token = token
         api_client.set_auth_token(token)
 
     if not st.session_state.user and not token:

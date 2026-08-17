@@ -8,6 +8,7 @@ import i18n
 
 def _on_authenticated(result: dict, cookie_manager) -> None:
     token = result["access_token"]
+    st.session_state.auth_token = token
     api_client.set_auth_token(token)
     cookie_manager.set("auth_token", token)
     st.session_state.user = result["user"]

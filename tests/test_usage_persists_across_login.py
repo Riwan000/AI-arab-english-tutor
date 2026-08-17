@@ -1,4 +1,4 @@
-"""The same-day usage counter must survive a logout/login cycle (issue #137).
+﻿"""The same-day usage counter must survive a logout/login cycle (issue #137).
 
 `daily_usage` is keyed by user_id + date server-side, not carried in the JWT,
 so a fresh token from a second `/auth/login` call for the same account must
@@ -14,7 +14,6 @@ SECRET = "test-only-secret"
 os.environ.setdefault("JWT_SECRET_KEY", SECRET)
 
 from api.main import app  # noqa: E402 (secret must be set before import)
-from services import database as db  # noqa: E402
 from services import openrouter  # noqa: E402
 
 EMAIL = "learner@example.com"
@@ -22,8 +21,7 @@ PASSWORD = "correct horse battery staple"
 
 
 @pytest.fixture
-def scoped_client(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "usage.db")
+def scoped_client(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", SECRET)
     monkeypatch.setenv("DAILY_MESSAGE_LIMIT", "5")
     monkeypatch.setattr(openrouter, "chat_completion", lambda messages: "ok")
@@ -65,7 +63,7 @@ def test_usage_counter_survives_a_logout_login_cycle(scoped_client):
         json={"lesson_id": "present_simple", "messages": [{"role": "user", "content": "again"}]},
     )
 
-    # "logout" — the client discards its token; "login" — a fresh one is issued
+    # "logout" â€” the client discards its token; "login" â€” a fresh one is issued
     # via the same route the UI calls after a real logout/login cycle.
     login_headers = _auth_headers(
         scoped_client.post("/api/v1/auth/login", json={"email": EMAIL, "password": PASSWORD})

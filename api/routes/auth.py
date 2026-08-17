@@ -1,4 +1,4 @@
-import sqlite3
+import psycopg
 
 from fastapi import APIRouter, Depends, Request
 
@@ -46,13 +46,17 @@ def signup(
     password_hash = auth.hash_password(body.password)
     try:
         user_id = user_repo.create_user(body.email, password_hash, body.display_name)
-    except sqlite3.IntegrityError as exc:
+    except psycopg.errors.UniqueViolation as exc:
         raise DuplicateEmailError("A user with this email already exists") from exc
 
     user = user_repo.get_user_by_id(user_id)
     token = auth.create_access_token(user_id, settings.jwt_secret_key, settings.jwt_expiry_hours)
 
-    return TokenResponse(access_token=token, token_type="bearer", user=user)
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
+        user=User(**public_user_fields(user)),
+    )
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit(AUTH_RATE_LIMIT)

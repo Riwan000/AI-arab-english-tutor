@@ -44,8 +44,7 @@ def test_save_defaults_user_id_to_none(monkeypatch):
     assert captured["user_id"] is None
 
 
-def test_save_session_persists_user_id_on_the_conversation_row(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+def test_save_session_persists_user_id_on_the_conversation_row():
     user_id = db.create_user("learner@example.com", "hash", "Learner")
 
     conversation_id = db.save_session(
@@ -56,18 +55,15 @@ def test_save_session_persists_user_id_on_the_conversation_row(tmp_path, monkeyp
         user_id=user_id,
     )
 
-    conn = db.get_connection()
-    row = conn.execute(
-        "SELECT user_id FROM conversations WHERE id = ?", (conversation_id,)
-    ).fetchone()
-    conn.close()
+    with db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT user_id FROM conversations WHERE id = %s", (conversation_id,)
+        ).fetchone()
 
     assert row["user_id"] == user_id
 
 
-def test_save_session_defaults_user_id_to_null(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
-
+def test_save_session_defaults_user_id_to_null():
     conversation_id = db.save_session(
         lesson={"id": None, "title": "Free Talk"},
         messages=[{"role": "user", "content": "hi"}],
@@ -75,12 +71,11 @@ def test_save_session_defaults_user_id_to_null(tmp_path, monkeypatch):
         summary={"grammar": 90, "exchanges": 1, "mistake_count": 0},
     )
 
-    conn = db.get_connection()
-    row = conn.execute(
-        "SELECT user_id, lesson_id, lesson_title FROM conversations WHERE id = ?",
-        (conversation_id,),
-    ).fetchone()
-    conn.close()
+    with db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT user_id, lesson_id, lesson_title FROM conversations WHERE id = %s",
+            (conversation_id,),
+        ).fetchone()
 
     assert row["user_id"] is None
     assert row["lesson_id"] is None
@@ -107,9 +102,7 @@ def test_save_forwards_mode_to_database_layer(monkeypatch):
     assert captured["mode"] == "free_talk"
 
 
-def test_save_session_persists_mode_on_the_conversation_row(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
-
+def test_save_session_persists_mode_on_the_conversation_row():
     conversation_id = db.save_session(
         lesson={"id": None, "title": "Free Talk"},
         messages=[{"role": "user", "content": "hi"}],
@@ -118,18 +111,15 @@ def test_save_session_persists_mode_on_the_conversation_row(tmp_path, monkeypatc
         mode="free_talk",
     )
 
-    conn = db.get_connection()
-    row = conn.execute(
-        "SELECT mode FROM conversations WHERE id = ?", (conversation_id,)
-    ).fetchone()
-    conn.close()
+    with db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT mode FROM conversations WHERE id = %s", (conversation_id,)
+        ).fetchone()
 
     assert row["mode"] == "free_talk"
 
 
-def test_save_session_defaults_mode_to_lesson(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
-
+def test_save_session_defaults_mode_to_lesson():
     conversation_id = db.save_session(
         lesson={"id": "present_simple", "title": "Present Simple"},
         messages=[{"role": "user", "content": "hi"}],
@@ -137,11 +127,10 @@ def test_save_session_defaults_mode_to_lesson(tmp_path, monkeypatch):
         summary={"grammar": 90, "exchanges": 1, "mistake_count": 0},
     )
 
-    conn = db.get_connection()
-    row = conn.execute(
-        "SELECT mode FROM conversations WHERE id = ?", (conversation_id,)
-    ).fetchone()
-    conn.close()
+    with db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT mode FROM conversations WHERE id = %s", (conversation_id,)
+        ).fetchone()
 
     assert row["mode"] == "lesson"
 
@@ -160,9 +149,8 @@ def _save_session_for(user_id: int | None) -> int:
 
 
 @pytest.fixture
-def two_users(tmp_path, monkeypatch):
-    """Owner and intruder ids in a throwaway database, plus a repository."""
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+def two_users():
+    """Owner and intruder ids in the (per-test truncated) database, plus a repository."""
     owner = db.create_user("owner@example.com", "hash", "Owner")
     intruder = db.create_user("intruder@example.com", "hash", "Intruder")
     return SessionRepository(), owner, intruder

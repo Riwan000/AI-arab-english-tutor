@@ -22,3 +22,7 @@ template: |
 
   ## Native Language
   {native_language}
+
+  ## Student Learning History & Past Sessions
+  {past_context}
+

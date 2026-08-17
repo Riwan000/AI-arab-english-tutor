@@ -1,75 +1,100 @@
-"""services/voice.py: Deepgram Nova-2 transcription and Aura synthesis."""
+"""services/voice.py: ElevenLabs Scribe v2 transcription and multilingual TTS."""
 
-import httpx
+from types import SimpleNamespace
+
 import pytest
 
 from services import voice
 from services.errors import VoiceSynthesisError, VoiceTranscriptionError
 
 
-@pytest.fixture(autouse=True)
-def fake_api_key(monkeypatch):
-    monkeypatch.setattr(voice, "DEEPGRAM_API_KEY", "test-key")
+class _FakeSpeechToText:
+    def __init__(self, result=None, error=None):
+        self._result = result
+        self._error = error
+        self.calls = []
+
+    def convert(self, **kwargs):
+        self.calls.append(kwargs)
+        if self._error:
+            raise self._error
+        return self._result
 
 
-class _FakeResponse:
-    def __init__(self, status_code=200, json_data=None, content=b""):
-        self.status_code = status_code
-        self._json_data = json_data or {}
-        self.content = content
+class _FakeTextToSpeech:
+    def __init__(self, chunks=(b"audio-", b"bytes"), error=None):
+        self._chunks = chunks
+        self._error = error
+        self.calls = []
 
-    def raise_for_status(self):
-        if self.status_code >= 400:
-            request = httpx.Request("POST", "https://api.deepgram.com/v1/listen")
-            response = httpx.Response(self.status_code, request=request)
-            raise httpx.HTTPStatusError("error", request=request, response=response)
-
-    def json(self):
-        return self._json_data
+    def convert(self, **kwargs):
+        self.calls.append(kwargs)
+        if self._error:
+            raise self._error
+        return iter(self._chunks)
 
 
-def test_transcribe_audio_returns_the_transcript(monkeypatch):
-    payload = {
-        "results": {"channels": [{"alternatives": [{"transcript": "hello there"}]}]}
-    }
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: _FakeResponse(json_data=payload))
+class _FakeVoicesApi:
+    def __init__(self, voices=(), error=None):
+        self._voices = voices
+        self._error = error
+        self.calls = []
 
-    text = voice.transcribe_audio(b"raw-audio-bytes", "audio/wav")
+    def search(self, **kwargs):
+        self.calls.append(kwargs)
+        if self._error:
+            raise self._error
+        return SimpleNamespace(voices=self._voices)
 
-    assert text == "hello there"
+
+class _FakeClient:
+    def __init__(self, stt=None, tts=None, voices_api=None):
+        self.speech_to_text = stt or _FakeSpeechToText()
+        self.text_to_speech = tts or _FakeTextToSpeech()
+        self.voices = voices_api or _FakeVoicesApi()
 
 
-def test_transcribe_audio_sends_deepgram_headers_and_raw_body(monkeypatch):
-    captured = {}
+# ---------------------------------------------------------------------------
+# transcribe_audio
+# ---------------------------------------------------------------------------
 
-    def fake_post(url, params=None, headers=None, content=None, timeout=None):
-        captured["url"] = url
-        captured["params"] = params
-        captured["headers"] = headers
-        captured["content"] = content
-        payload = {"results": {"channels": [{"alternatives": [{"transcript": "ok"}]}]}}
-        return _FakeResponse(json_data=payload)
+def test_transcribe_audio_returns_transcript_and_detected_language(monkeypatch):
+    stt = _FakeSpeechToText(result=SimpleNamespace(text="hello there", language_code="en-US"))
+    monkeypatch.setattr(voice, "client", _FakeClient(stt=stt))
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    text, language = voice.transcribe_audio(b"raw-audio-bytes", "audio/wav")
+
+    assert (text, language) == ("hello there", "en")
+
+
+def test_transcribe_audio_detects_arabic(monkeypatch):
+    stt = _FakeSpeechToText(result=SimpleNamespace(text="مرحبا", language_code="ar-SA"))
+    monkeypatch.setattr(voice, "client", _FakeClient(stt=stt))
+
+    _text, language = voice.transcribe_audio(b"raw-audio-bytes", "audio/wav")
+
+    assert language == "ar"
+
+
+def test_transcribe_audio_sends_the_audio_bytes_and_scribe_model(monkeypatch):
+    stt = _FakeSpeechToText(result=SimpleNamespace(text="ok", language_code="en-US"))
+    monkeypatch.setattr(voice, "client", _FakeClient(stt=stt))
 
     voice.transcribe_audio(b"raw-audio-bytes", "audio/webm")
 
-    assert captured["url"] == f"{voice.DEEPGRAM_BASE_URL}/listen"
-    assert captured["params"] == {"model": "nova-2", "smart_format": "true"}
-    assert captured["headers"]["Authorization"] == "Token test-key"
-    assert captured["headers"]["Content-Type"] == "audio/webm"
-    assert captured["content"] == b"raw-audio-bytes"
+    assert stt.calls == [{"file": b"raw-audio-bytes", "model_id": "scribe_v2"}]
 
 
 def test_transcribe_audio_raises_without_an_api_key(monkeypatch):
-    monkeypatch.setattr(voice, "DEEPGRAM_API_KEY", "")
+    monkeypatch.setattr(voice, "client", None)
 
     with pytest.raises(VoiceTranscriptionError):
         voice.transcribe_audio(b"raw-audio-bytes", "audio/wav")
 
 
-def test_transcribe_audio_wraps_http_errors(monkeypatch):
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: _FakeResponse(status_code=502))
+def test_transcribe_audio_wraps_api_errors(monkeypatch):
+    stt = _FakeSpeechToText(error=RuntimeError("boom"))
+    monkeypatch.setattr(voice, "client", _FakeClient(stt=stt))
 
     with pytest.raises(VoiceTranscriptionError) as exc_info:
         voice.transcribe_audio(b"raw-audio-bytes", "audio/wav")
@@ -77,89 +102,132 @@ def test_transcribe_audio_wraps_http_errors(monkeypatch):
     assert exc_info.value.status_code == 502
 
 
-def test_transcribe_audio_wraps_timeouts(monkeypatch):
-    def raise_timeout(*args, **kwargs):
-        raise httpx.TimeoutException("timed out")
-
-    monkeypatch.setattr(httpx, "post", raise_timeout)
+def test_transcribe_audio_wraps_a_response_missing_text(monkeypatch):
+    stt = _FakeSpeechToText(result=SimpleNamespace(language_code="en-US"))
+    monkeypatch.setattr(voice, "client", _FakeClient(stt=stt))
 
     with pytest.raises(VoiceTranscriptionError):
         voice.transcribe_audio(b"raw-audio-bytes", "audio/wav")
 
 
-def test_transcribe_audio_wraps_unexpected_response_shapes(monkeypatch):
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: _FakeResponse(json_data={}))
+def test_transcribe_audio_wraps_a_non_string_transcript(monkeypatch):
+    stt = _FakeSpeechToText(result=SimpleNamespace(text=None, language_code="en-US"))
+    monkeypatch.setattr(voice, "client", _FakeClient(stt=stt))
 
     with pytest.raises(VoiceTranscriptionError):
         voice.transcribe_audio(b"raw-audio-bytes", "audio/wav")
 
 
-def test_transcribe_audio_wraps_a_non_json_200_response(monkeypatch):
-    class _NonJsonResponse(_FakeResponse):
-        def json(self):
-            raise ValueError("Expecting value: line 1 column 1 (char 0)")
-
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: _NonJsonResponse())
+def test_transcribe_audio_wraps_a_missing_detected_language(monkeypatch):
+    stt = _FakeSpeechToText(result=SimpleNamespace(text="hello"))
+    monkeypatch.setattr(voice, "client", _FakeClient(stt=stt))
 
     with pytest.raises(VoiceTranscriptionError):
         voice.transcribe_audio(b"raw-audio-bytes", "audio/wav")
 
 
-def test_transcribe_audio_wraps_a_null_transcript(monkeypatch):
-    payload = {"results": {"channels": [{"alternatives": [{"transcript": None}]}]}}
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: _FakeResponse(json_data=payload))
+def test_transcribe_audio_wraps_an_unsupported_detected_language(monkeypatch):
+    stt = _FakeSpeechToText(result=SimpleNamespace(text="bonjour", language_code="fr-FR"))
+    monkeypatch.setattr(voice, "client", _FakeClient(stt=stt))
 
     with pytest.raises(VoiceTranscriptionError):
         voice.transcribe_audio(b"raw-audio-bytes", "audio/wav")
 
 
-def test_transcribe_audio_wraps_a_non_list_channels_field(monkeypatch):
-    payload = {"results": {"channels": "not-a-list"}}
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: _FakeResponse(json_data=payload))
+# ---------------------------------------------------------------------------
+# get_voices
+# ---------------------------------------------------------------------------
 
-    with pytest.raises(VoiceTranscriptionError):
-        voice.transcribe_audio(b"raw-audio-bytes", "audio/wav")
+def test_get_voices_returns_the_matching_voices(monkeypatch):
+    fake_voices = [SimpleNamespace(name="Aria"), SimpleNamespace(name="Sana")]
+    voices_api = _FakeVoicesApi(voices=fake_voices)
+    monkeypatch.setattr(voice, "client", _FakeClient(voices_api=voices_api))
+
+    result = voice.get_voices("ar")
+
+    assert result == fake_voices
+    assert voices_api.calls == [{"language": ["ar"], "page_size": 100}]
 
 
-def test_synthesize_speech_returns_audio_bytes(monkeypatch):
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: _FakeResponse(content=b"audio-bytes"))
+def test_get_voices_raises_without_an_api_key(monkeypatch):
+    monkeypatch.setattr(voice, "client", None)
 
-    audio = voice.synthesize_speech("hello")
+    with pytest.raises(VoiceSynthesisError):
+        voice.get_voices("en")
+
+
+def test_get_voices_rejects_an_unsupported_language(monkeypatch):
+    monkeypatch.setattr(voice, "client", _FakeClient())
+
+    with pytest.raises(VoiceSynthesisError):
+        voice.get_voices("fr")
+
+
+def test_get_voices_wraps_api_errors(monkeypatch):
+    voices_api = _FakeVoicesApi(error=RuntimeError("boom"))
+    monkeypatch.setattr(voice, "client", _FakeClient(voices_api=voices_api))
+
+    with pytest.raises(VoiceSynthesisError) as exc_info:
+        voice.get_voices("en")
+
+    assert exc_info.value.status_code == 502
+
+
+# ---------------------------------------------------------------------------
+# synthesize_speech
+# ---------------------------------------------------------------------------
+
+def test_synthesize_speech_returns_joined_audio_bytes(monkeypatch):
+    tts = _FakeTextToSpeech(chunks=(b"audio-", b"bytes"))
+    monkeypatch.setattr(voice, "client", _FakeClient(tts=tts))
+    monkeypatch.setattr(voice, "VOICE_MAP", {"en": "voice-en-id", "ar": "voice-ar-id"})
+
+    audio = voice.synthesize_speech("hello there", language="en")
 
     assert audio == b"audio-bytes"
 
 
-def test_synthesize_speech_sends_the_requested_voice_model(monkeypatch):
-    captured = {}
+def test_synthesize_speech_sends_the_voice_id_model_and_text(monkeypatch):
+    tts = _FakeTextToSpeech()
+    monkeypatch.setattr(voice, "client", _FakeClient(tts=tts))
+    monkeypatch.setattr(voice, "VOICE_MAP", {"en": "voice-en-id", "ar": "voice-ar-id"})
 
-    def fake_post(url, params=None, headers=None, json=None, timeout=None):
-        captured["url"] = url
-        captured["params"] = params
-        captured["headers"] = headers
-        captured["json"] = json
-        return _FakeResponse(content=b"audio-bytes")
+    voice.synthesize_speech("hello there", language="en")
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-
-    voice.synthesize_speech("hello there", voice="aura-luna-en")
-
-    assert captured["url"] == f"{voice.DEEPGRAM_BASE_URL}/speak"
-    assert captured["params"] == {"model": "aura-luna-en"}
-    assert captured["headers"]["Authorization"] == "Token test-key"
-    assert captured["json"] == {"text": "hello there"}
+    assert tts.calls == [
+        {"voice_id": "voice-en-id", "model_id": "eleven_multilingual_v2", "text": "hello there"}
+    ]
 
 
 def test_synthesize_speech_raises_without_an_api_key(monkeypatch):
-    monkeypatch.setattr(voice, "DEEPGRAM_API_KEY", "")
+    monkeypatch.setattr(voice, "client", None)
 
     with pytest.raises(VoiceSynthesisError):
         voice.synthesize_speech("hello")
 
 
-def test_synthesize_speech_wraps_http_errors(monkeypatch):
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: _FakeResponse(status_code=500))
+def test_synthesize_speech_rejects_an_unsupported_language(monkeypatch):
+    monkeypatch.setattr(voice, "client", _FakeClient())
+    monkeypatch.setattr(voice, "VOICE_MAP", {"en": "voice-en-id", "ar": "voice-ar-id"})
+
+    with pytest.raises(VoiceSynthesisError):
+        voice.synthesize_speech("hello", language="fr")
+
+
+def test_synthesize_speech_raises_when_no_voice_id_is_configured(monkeypatch):
+    monkeypatch.setattr(voice, "client", _FakeClient())
+    monkeypatch.setattr(voice, "VOICE_MAP", {"en": "", "ar": "voice-ar-id"})
+
+    with pytest.raises(VoiceSynthesisError):
+        voice.synthesize_speech("hello", language="en")
+
+
+def test_synthesize_speech_wraps_api_errors(monkeypatch):
+    tts = _FakeTextToSpeech(error=RuntimeError("boom"))
+    monkeypatch.setattr(voice, "client", _FakeClient(tts=tts))
+    monkeypatch.setattr(voice, "VOICE_MAP", {"en": "voice-en-id", "ar": "voice-ar-id"})
 
     with pytest.raises(VoiceSynthesisError) as exc_info:
-        voice.synthesize_speech("hello")
+        voice.synthesize_speech("hello", language="en")
 
     assert exc_info.value.status_code == 502

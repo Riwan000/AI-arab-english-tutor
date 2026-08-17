@@ -1,8 +1,8 @@
-import sqlite3
 import time
 from statistics import mean
 
 import jwt
+import psycopg
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -107,8 +107,7 @@ def test_default_token_expiry_is_within_spec_range():
 
 
 @pytest.fixture
-def user_repo(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+def user_repo():
     return UserRepository()
 
 
@@ -147,7 +146,7 @@ def test_get_user_by_email_returns_none_for_unknown_email(user_repo):
 def test_create_user_rejects_duplicate_email_regardless_of_case(user_repo):
     user_repo.create_user("dupe@example.com", "hashed", "First")
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(psycopg.errors.UniqueViolation):
         user_repo.create_user("DUPE@Example.com", "hashed", "Second")
 
 
@@ -234,8 +233,7 @@ def test_get_current_user_rejects_token_for_deleted_user(user_repo, current_user
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "api.db")
+def client(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", SECRET)
 
     from api.config import get_settings
@@ -249,8 +247,8 @@ def client(tmp_path, monkeypatch):
     # otherwise share one limiter bucket keyed on the same TestClient IP.
     monkeypatch.setattr(limiter, "enabled", False)
 
-    # Deliberately not a context manager: the lifespan would repoint
-    # database.DB_PATH at the real database file.
+    # Deliberately not a context manager: running the lifespan would re-read
+    # settings and re-open the connection pool the conftest fixture manages.
     yield TestClient(app)
 
     get_settings.cache_clear()
@@ -289,6 +287,24 @@ def test_signup_rejects_duplicate_email_differing_only_by_case(client):
     response = client.post(
         "/api/v1/auth/signup", json={**SIGNUP_BODY, "email": "USER@Example.com"}
     )
+
+    assert response.status_code == 409
+
+
+def test_signup_maps_the_unique_constraint_race_to_409(client, monkeypatch):
+    """The UNIQUE constraint — not the fast-path lookup — is the real guard.
+
+    Two concurrent signups can both pass `get_user_by_email`; the loser must
+    still get a 409, not a 500. Forcing the lookup to report "no such user"
+    reproduces that race deterministically.
+    """
+    client.post("/api/v1/auth/signup", json=SIGNUP_BODY)
+
+    from repositories.user_repo import UserRepository
+
+    monkeypatch.setattr(UserRepository, "get_user_by_email", lambda self, email: None)
+
+    response = client.post("/api/v1/auth/signup", json=SIGNUP_BODY)
 
     assert response.status_code == 409
 
@@ -402,17 +418,13 @@ def test_login_takes_similar_time_for_known_and_unknown_emails(client):
     )
 
 
-def test_record_auth_attempt_increments_per_ip_and_email(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "attempts.db")
-
+def test_record_auth_attempt_increments_per_ip_and_email():
     assert db.record_auth_attempt("1.2.3.4", "a@example.com") == 1
     assert db.record_auth_attempt("1.2.3.4", "a@example.com") == 2
     assert db.record_auth_attempt("1.2.3.4", "a@example.com") == 3
 
 
-def test_record_auth_attempt_keeps_separate_counters_per_ip_and_email(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "attempts.db")
-
+def test_record_auth_attempt_keeps_separate_counters_per_ip_and_email():
     assert db.record_auth_attempt("1.2.3.4", "a@example.com") == 1
     assert db.record_auth_attempt("5.6.7.8", "a@example.com") == 1
     assert db.record_auth_attempt("1.2.3.4", "b@example.com") == 1
@@ -468,8 +480,7 @@ def test_repeated_signups_for_the_same_email_hit_the_daily_cap(client, monkeypat
     assert statuses[2:] == [429, 429]
 
 
-def test_login_is_rate_limited(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "ratelimit.db")
+def test_login_is_rate_limited(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", SECRET)
 
     from api.config import get_settings

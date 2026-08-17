@@ -1,4 +1,4 @@
-"""The daily message limit must be enforced on chat.py's LLM-calling routes."""
+﻿"""The daily message limit must be enforced on chat.py's LLM-calling routes."""
 
 import os
 
@@ -9,13 +9,11 @@ SECRET = "test-only-secret"
 os.environ.setdefault("JWT_SECRET_KEY", SECRET)
 
 from api.main import app  # noqa: E402 (secret must be set before import)
-from services import database as db  # noqa: E402
 from services import openrouter  # noqa: E402
 
 
 @pytest.fixture
-def scoped_client(tmp_path, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "usage.db")
+def scoped_client(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", SECRET)
     monkeypatch.setenv("DAILY_MESSAGE_LIMIT", "2")
     monkeypatch.setattr(openrouter, "chat_completion", lambda messages: "ok")
