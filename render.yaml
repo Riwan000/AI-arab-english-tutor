@@ -1,9 +1,10 @@
-# Render Blueprint — FastAPI backend only (issue #64)
+# Render Blueprint — FastAPI backend + React frontend (issue #64)
 # Deploy: Render Dashboard → New → Blueprint → connect this repo
-# Streamlit frontend deploys separately on Streamlit Cloud.
+# The frontend is the React/Vite app, deployed as the
+# ai-english-tutor-frontend static site service defined below.
 #
-# Persistent SQLite (issue #66): add via Render Dashboard → Disks → mount /app/database
-# (requires Starter plan; not supported on free tier — do not add `disk` here on free).
+# Persistence is Supabase Postgres (DATABASE_URL below), not a local disk —
+# no Render disk/mount needed.
 
 services:
   - type: web
@@ -23,9 +24,25 @@ services:
         value: https://openrouter.ai/api/v1
       - key: DEFAULT_MODEL
         value: openai/gpt-4.1
-      - key: DATABASE_PATH
-        value: /app/database/english_tutor.db
+      - key: DATABASE_URL
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
       - key: RETENTION_DAYS
         value: "5"
       - key: CORS_ORIGINS
         sync: false
+
+  # NOTE: if the backend service above is ever renamed, update VITE_API_URL below to match.
+  - name: ai-english-tutor-frontend
+    type: web
+    runtime: static
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://ai-english-tutor-api.onrender.com
+    routes:
+      - path: /*
+        destination: /index.html
+        matchType: rewrite

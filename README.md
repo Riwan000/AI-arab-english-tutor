@@ -1,6 +1,6 @@
 # AI English Tutor for Arabic Speakers
 
-Phase 1 MVP — a Streamlit app that teaches English grammar one lesson at a time through guided AI conversation with bilingual corrections.
+An app that teaches English grammar one lesson at a time through guided AI conversation with bilingual corrections, backed by a FastAPI API and a React/Vite frontend.
 
 ## Setup
 
@@ -11,16 +11,12 @@ python -m venv .venv
 .venv\Scripts\activate        # Windows
 # source .venv/bin/activate  # macOS/Linux
 
-# Full stack (API + Streamlit)
 pip install -r requirements.txt
-
-# API only (separate API host or Docker)
-pip install -r requirements-api.txt
 ```
 
 ## Local development (two processes)
 
-Run the FastAPI backend and Streamlit frontend in separate terminals.
+Run the FastAPI backend and React frontend in separate terminals.
 
 ### Terminal 1 — API
 
@@ -29,27 +25,17 @@ cp .env.example .env          # add OPENROUTER_API_KEY (backend only)
 uvicorn api.main:app --reload --port 8000
 ```
 
-### Terminal 2 — Streamlit
-
-Point the frontend at the local API with `BACKEND_URL`:
+### Terminal 2 — Frontend
 
 ```bash
-cp .streamlit/secrets.toml.example .streamlit/secrets.toml
-# Edit secrets.toml — BACKEND_URL = "http://localhost:8000"
-streamlit run app.py
+cd frontend
+npm install
+npm run dev
 ```
 
-Or set the environment variable instead of secrets:
+The dev server proxies to `http://localhost:8000` by default; override with the `VITE_API_URL` environment variable if the backend runs elsewhere. See `frontend/README.md` for details.
 
-```bash
-# Linux / macOS
-BACKEND_URL=http://localhost:8000 streamlit run app.py
-
-# Windows PowerShell
-$env:BACKEND_URL="http://localhost:8000"; streamlit run app.py
-```
-
-The frontend talks to the API over HTTP. `OPENROUTER_API_KEY` must only be set in the backend `.env`, never in Streamlit secrets.
+The frontend talks to the API over HTTP. `OPENROUTER_API_KEY` must only be set in the backend `.env`, never exposed to the frontend.
 
 ## Deploy API to Render (free tier)
 
@@ -61,8 +47,10 @@ The repo includes a `Dockerfile` and `render.yaml` for [Render](https://render.c
 2. In [Render](https://dashboard.render.com): **New → Blueprint** → connect the repo.
 3. When prompted, set secrets:
    - `OPENROUTER_API_KEY` — from [OpenRouter](https://openrouter.ai/keys)
-   - `CORS_ORIGINS` — your Streamlit Cloud URL (e.g. `https://your-app.streamlit.app`). Use `http://localhost:8501` until Streamlit is deployed.
+   - `CORS_ORIGINS` — your frontend's deployed URL (e.g. `https://ai-english-tutor-frontend.onrender.com`).
 4. Deploy. When live, open `https://<your-service>.onrender.com/api/v1/health` — expect `{"status":"ok"}`.
+
+The Blueprint also deploys the frontend as the `ai-english-tutor-frontend` static site service (see `render.yaml`), which serves the React app and talks to the API via `VITE_API_URL`.
 
 ### Option B — Manual web service
 
@@ -78,7 +66,7 @@ The repo includes a `Dockerfile` and `render.yaml` for [Render](https://render.c
 | `DEFAULT_MODEL` | `openai/gpt-4.1` |
 | `DATABASE_PATH` | `/app/database/english_tutor.db` |
 | `RETENTION_DAYS` | `5` |
-| `CORS_ORIGINS` | Streamlit Cloud URL (comma-separated if multiple) |
+| `CORS_ORIGINS` | Frontend deployed URL (comma-separated if multiple) |
 
 5. Deploy and verify the health endpoint.
 
@@ -107,7 +95,7 @@ By default, SQLite on Render is **ephemeral** — data resets on redeploy. To ke
 - The service **spins down after ~15 min idle**; the first request after that may take 30–60s (cold start).
 - Without a persistent disk, SQLite data may reset on redeploy. Fine for demo.
 - With a persistent disk (Starter+), session data survives redeploys.
-- After Streamlit Cloud deploy, set `BACKEND_URL` in Streamlit secrets to your Render URL (e.g. `https://ai-english-tutor-api.onrender.com`).
+- After deploying the API, set `VITE_API_URL` in the frontend service's env vars to your Render API URL (e.g. `https://ai-english-tutor-api.onrender.com`).
 
 ## Docs
 

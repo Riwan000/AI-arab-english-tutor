@@ -41,6 +41,14 @@ npm run build
 
 Outputs a static bundle to `frontend/dist/`.
 
+## Deployment
+
+Deploys as a Render static site (`ai-english-tutor-frontend` in the repo
+root's `render.yaml`), built with `npm ci && npm run build` and served from
+`frontend/dist`. `VITE_API_URL` there points at the FastAPI backend service;
+update it if that service is ever renamed. This will replace the Streamlit
+Cloud deployment once the legacy app is retired.
+
 ## Structure
 
 - `src/App.jsx` — owns top-level view state (`auth` → `picker` → `lesson` →

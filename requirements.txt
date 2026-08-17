@@ -1,12 +1,9 @@
-streamlit>=1.32.0
 httpx>=0.27.0
 python-dotenv>=1.0.0
 pydantic[email]>=2.6.0
 email-validator>=2.1.0
 pyyaml>=6.0.0
-extra-streamlit-components>=0.1.71
 
-# API (Phase 2+)
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 pydantic-settings>=2.2.0
@@ -16,5 +13,3 @@ slowapi>=0.1.9
 python-multipart>=0.0.9
 elevenlabs>=2.64.0
 psycopg[binary,pool]>=3.1
-
-# API-only split for separate deployment: see requirements-api.txt

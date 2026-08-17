@@ -131,7 +131,8 @@ export const voice = {
 export const sessions = {
   create: ({ lesson_id, messages, mistakes, mode }) =>
     apiFetch("/api/v1/sessions", { method: "POST", body: { lesson_id, messages, mistakes, mode } }),
-  list: (limit = 10) => apiFetch(`/api/v1/sessions?limit=${limit}`),
+  list: (limit = 10) => apiFetch(`/api/v1/sessions?limit=${limit}`).then((data) => data.sessions),
+  get: (id) => apiFetch(`/api/v1/sessions/${id}`),
 };
 
 export const usage = {

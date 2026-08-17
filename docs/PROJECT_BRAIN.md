@@ -1,5 +1,7 @@
 # Project Brain — AI English Tutor for Arabic Speakers
 
+**Note (2026-08-17):** Streamlit has been fully removed; the frontend is now the React app at `frontend/`. This document's architecture diagrams and directory map below still describe the old Streamlit-based split and are stale pending a full rewrite.
+
 **Purpose of this document:** a single, code-verified reference to how this repository actually works today — architecture, request flows, every module's responsibility, the data model, prompt design, deployment, and known gaps. Unlike the planning docs in the repo root (`prd.md`, `hld.md`, `tech-stack.md`, `backend.md`, `db.md`, `directory.md`), which were written *before* implementation and are now partly historical, this document was produced by reading the current source tree directly (verified 2026-08-11, commit `99c187f`).
 
 ---

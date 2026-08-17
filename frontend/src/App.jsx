@@ -7,6 +7,7 @@ import PickerView from "./components/PickerView.jsx";
 import LessonView from "./components/LessonView.jsx";
 import ChatView from "./components/ChatView.jsx";
 import SummaryView from "./components/SummaryView.jsx";
+import SessionHistoryView from "./components/SessionHistoryView.jsx";
 
 const USER_STORAGE_KEY = "englishTutor.user";
 const LANG_STORAGE_KEY = "englishTutor.language";
@@ -109,6 +110,11 @@ export default function App() {
       <header className="app-header">
         <h1>{t("app_title")}</h1>
         <div className="header-actions">
+          {token && (view === "picker" || view === "summary") && (
+            <button className="btn btn-ghost" onClick={() => setView("history")}>
+              {t("past_sessions_button")}
+            </button>
+          )}
           {user && (
             <button className="btn btn-ghost" onClick={handleLogout}>
               {t("logout_button")}
@@ -163,6 +169,10 @@ export default function App() {
           mistakes={sessionMistakes}
           onNewSession={handleNewSession}
         />
+      )}
+
+      {view === "history" && (
+        <SessionHistoryView t={t} onBack={() => setView("picker")} />
       )}
     </div>
   );
