@@ -78,7 +78,7 @@ def scoped_client(monkeypatch, voice_calls):
 
     monkeypatch.setattr(voice, "transcribe_audio", fake_transcribe)
     monkeypatch.setattr(voice, "synthesize_speech_stream", fake_synthesize)
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: "Great job!")
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter(["Great job!"]))
 
     from api.config import get_settings
 
@@ -264,6 +264,32 @@ def test_repeated_speak_calls_advance_only_the_voice_counter(scoped_client, monk
     get_settings.cache_clear()
 
 
+def test_speak_with_a_multi_sentence_reply_still_costs_only_one_voice_unit(
+    scoped_client, monkeypatch
+):
+    """/speak pipelines a multi-sentence reply into two internal TTS calls
+    (services.voice.synthesize_speech_stream_pipelined) so playback can start
+    on the first sentence sooner -- but that's one /speak request from the
+    client's point of view, so it must cost exactly one voice-quota unit, not
+    two. Guards against the quota literally doubling for any reply with more
+    than one sentence.
+    """
+    headers = _signup(scoped_client, "phase9-pipeline-quota@example.com")
+    monkeypatch.setenv("DAILY_VOICE_CALL_LIMIT", "1")
+
+    from api.config import get_settings
+
+    get_settings.cache_clear()
+
+    response = _speak(scoped_client, headers, "Good try! Let's fix one small thing.")
+    assert response.status_code == 200, response.text
+
+    usage = scoped_client.get("/api/v1/usage/today", headers=headers)
+    assert usage.json()["voice_used"] == 1
+
+    get_settings.cache_clear()
+
+
 # --- #163: Phase 9 exit -- full voice turn works end to end ----------------
 
 
@@ -278,7 +304,7 @@ def test_full_voice_turn_record_and_reply_round_trip(scoped_client, monkeypatch)
     round trip it always also covered.
     """
     headers = _signup(scoped_client, "phase9-163@example.com")
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: LLM_REPLY_WITH_CORRECTION)
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter([LLM_REPLY_WITH_CORRECTION]))
 
     # 1. Record voice -> transcribed to text.
     transcribed = _transcribe(scoped_client, headers)

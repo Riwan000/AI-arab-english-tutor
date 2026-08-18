@@ -19,7 +19,11 @@ def start_chat(
 ) -> ChatResponse:
     usage.check_and_increment(current_user.id)
     return conversation.start_conversation(
-        body.lesson_id, body.difficulty, body.mode, user_id=current_user.id
+        body.lesson_id,
+        body.difficulty,
+        body.mode,
+        user_id=current_user.id,
+        language=body.language,
     )
 
 
@@ -37,6 +41,7 @@ def send_chat_message(
         body.difficulty,
         body.mode,
         user_id=current_user.id,
+        language=body.language,
     )
 
 

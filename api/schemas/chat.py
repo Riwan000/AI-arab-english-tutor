@@ -14,12 +14,19 @@ class ChatStartRequest(BaseModel):
     lesson_id: str | None = Field(default=None, min_length=1)
     difficulty: Literal["beginner", "intermediate", "advanced"] = "beginner"
     mode: Literal["lesson", "free_talk"] = "lesson"
+    # The voice language the frontend will request on its follow-up POST
+    # /voice/speak call — lets the backend warm TTS in the right voice while
+    # the reply is still streaming in. Defaults to "en"; a mismatched guess
+    # just means /voice/speak's cache lookup misses and it synthesizes fresh,
+    # exactly as if this field didn't exist.
+    language: Literal["en", "ar"] = "en"
 
 
 class ChatMessageRequest(BaseModel):
     lesson_id: str | None = Field(default=None, min_length=1)
     difficulty: Literal["beginner", "intermediate", "advanced"] = "beginner"
     mode: Literal["lesson", "free_talk"] = "lesson"
+    language: Literal["en", "ar"] = "en"
     messages: list[Message] = Field(min_length=1, max_length=MAX_HISTORY_MESSAGES)
 
     @field_validator("messages")

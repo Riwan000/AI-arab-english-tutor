@@ -16,7 +16,7 @@ from services import openrouter  # noqa: E402
 def scoped_client(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", SECRET)
     monkeypatch.setenv("DAILY_MESSAGE_LIMIT", "2")
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: "ok")
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter(["ok"]))
 
     from api.config import get_settings
 

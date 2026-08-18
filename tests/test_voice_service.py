@@ -207,7 +207,12 @@ def test_synthesize_speech_stream_sends_the_voice_id_model_and_text(monkeypatch)
     list(voice.synthesize_speech_stream("hello there", language="en"))
 
     assert tts.calls == [
-        {"voice_id": "voice-en-id", "model_id": "eleven_multilingual_v2", "text": "hello there"}
+        {
+            "voice_id": "voice-en-id",
+            "model_id": "eleven_flash_v2_5",
+            "text": "hello there",
+            "optimize_streaming_latency": 3,
+        }
     ]
 
 
@@ -243,3 +248,75 @@ def test_synthesize_speech_stream_wraps_api_errors(monkeypatch):
         next(voice.synthesize_speech_stream("hello", language="en"))
 
     assert exc_info.value.status_code == 502
+
+
+# ---------------------------------------------------------------------------
+# synthesize_speech_stream_pipelined
+# ---------------------------------------------------------------------------
+
+
+class _EchoTextToSpeech:
+    """Echoes each call's `text` back as its audio chunk, so tests can
+    verify per-sentence ordering/content without a shared fixed payload."""
+
+    def __init__(self):
+        self.calls = []
+
+    def stream(self, **kwargs):
+        self.calls.append(kwargs)
+        return iter([kwargs["text"].encode()])
+
+
+class _FailOnTextToSpeech:
+    """Echoes text back as audio, except for one specific text that raises —
+    used to prove an error in the backgrounded "rest" segment still
+    propagates as VoiceSynthesisError."""
+
+    def __init__(self, fail_text):
+        self._fail_text = fail_text
+        self.calls = []
+
+    def stream(self, **kwargs):
+        self.calls.append(kwargs)
+        if kwargs["text"] == self._fail_text:
+            raise RuntimeError("boom")
+        return iter([kwargs["text"].encode()])
+
+
+def test_pipelined_falls_back_to_one_call_without_a_sentence_boundary(monkeypatch):
+    tts = _EchoTextToSpeech()
+    monkeypatch.setattr(voice, "client", _FakeClient(tts=tts))
+    monkeypatch.setattr(voice, "VOICE_MAP", {"en": "voice-en-id", "ar": "voice-ar-id"})
+
+    chunks = list(voice.synthesize_speech_stream_pipelined("hello there", language="en"))
+
+    assert chunks == [b"hello there"]
+    assert len(tts.calls) == 1
+
+
+def test_pipelined_splits_and_streams_the_first_sentence_first(monkeypatch):
+    tts = _EchoTextToSpeech()
+    monkeypatch.setattr(voice, "client", _FakeClient(tts=tts))
+    monkeypatch.setattr(voice, "VOICE_MAP", {"en": "voice-en-id", "ar": "voice-ar-id"})
+
+    chunks = list(
+        voice.synthesize_speech_stream_pipelined(
+            "Good try! Let's fix one small thing.", language="en"
+        )
+    )
+
+    assert chunks == [b"Good try!", b"Let's fix one small thing."]
+    assert len(tts.calls) == 2
+
+
+def test_pipelined_propagates_errors_from_the_backgrounded_rest_segment(monkeypatch):
+    tts = _FailOnTextToSpeech(fail_text="Let's fix one small thing.")
+    monkeypatch.setattr(voice, "client", _FakeClient(tts=tts))
+    monkeypatch.setattr(voice, "VOICE_MAP", {"en": "voice-en-id", "ar": "voice-ar-id"})
+
+    with pytest.raises(VoiceSynthesisError):
+        list(
+            voice.synthesize_speech_stream_pipelined(
+                "Good try! Let's fix one small thing.", language="en"
+            )
+        )

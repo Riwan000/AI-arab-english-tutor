@@ -17,12 +17,48 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
   const [usageToday, setUsageToday] = useState(null);
   const [draft, setDraft] = useState(null);
   const [endingSession, setEndingSession] = useState(false);
+  const [streamingIndex, setStreamingIndex] = useState(null);
+  const [streamingText, setStreamingText] = useState("");
   const listRef = useRef(null);
   const audioRef = useRef(null);
   const micRef = useRef(null);
   const startedRef = useRef(false);
   const speechAbortRef = useRef(null);
   const swapTimerRef = useRef(null);
+  const streamingTimerRef = useRef(null);
+
+  // Reveals an assistant reply a few characters at a time instead of all at
+  // once, so the text catches up to the audio that's already speaking it
+  // rather than dumping the whole sentence the moment playback starts.
+  function startTextStream(index, fullText) {
+    if (streamingTimerRef.current) clearInterval(streamingTimerRef.current);
+    setStreamingIndex(index);
+    setStreamingText("");
+
+    const CHARS_PER_TICK = 2;
+    const TICK_MS = 30;
+    let shown = 0;
+
+    streamingTimerRef.current = setInterval(() => {
+      shown = Math.min(fullText.length, shown + CHARS_PER_TICK);
+      setStreamingText(fullText.slice(0, shown));
+      if (shown >= fullText.length) {
+        clearInterval(streamingTimerRef.current);
+        streamingTimerRef.current = null;
+        // Commit the full text into the message itself before clearing the
+        // streaming flag — otherwise the render falls back to msg.content,
+        // which is still the "" placeholder set when the message was added.
+        setMessages((prev) =>
+          prev.map((m, i) => (i === index ? { ...m, content: fullText } : m))
+        );
+        setStreamingIndex(null);
+      }
+    }, TICK_MS);
+  }
+
+  useEffect(() => {
+    return () => clearInterval(streamingTimerRef.current);
+  }, []);
 
   // The hero orb stays shrunk while the AI is speaking and only grows back
   // once playback ends and it's the learner's turn to talk.
@@ -57,7 +93,7 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
       });
   }
 
-  async function handleSpeak(index, text, { autoArm = false } = {}) {
+  async function handleSpeak(index, text, { autoArm = false, onAudioStart, speechId } = {}) {
     if (!text) return;
     if (index !== null) setSpeakingIndex(index);
 
@@ -72,15 +108,28 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
     const controller = new AbortController();
     speechAbortRef.current = controller;
 
+    // Guaranteed to fire exactly once: at real playback start, or as a
+    // fallback below if synthesis/playback never got that far (network
+    // error, blocked autoplay) — so a deferred reply is never left unshown.
+    let started = false;
+    const fireAudioStart = () => {
+      if (started) return;
+      started = true;
+      onAudioStart?.();
+    };
+
     try {
+      const response = await voice.speak(text, lang === "ar" ? "ar" : "en", speechId);
       if (audioRef.current) {
-        await speakPipelined(audioRef.current, text, lang === "ar" ? "ar" : "en", {
+        await playStreamedAudio(audioRef.current, response, {
           signal: controller.signal,
+          onStart: fireAudioStart,
         });
       }
     } catch (err) {
       console.warn("Speech synthesis error:", err);
     } finally {
+      fireAudioStart();
       if (index !== null) setSpeakingIndex(null);
       if (speechAbortRef.current === controller) {
         speechAbortRef.current = null;
@@ -98,12 +147,28 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
 
   function startFreshConversation() {
     chat
-      .start({ lesson_id: lesson ? lesson.id : null, difficulty, mode })
+      .start({
+        lesson_id: lesson ? lesson.id : null,
+        difficulty,
+        mode,
+        language: lang === "ar" ? "ar" : "en",
+      })
       .then((result) => {
         refreshUsage();
         if (!result.reply) return;
-        setMessages([{ role: "assistant", content: result.reply, corrections: result.corrections || [] }]);
-        handleSpeak(0, result.reply, { autoArm: true });
+        const assistantMessage = {
+          role: "assistant",
+          content: result.reply,
+          corrections: result.corrections || [],
+        };
+        handleSpeak(0, result.reply, {
+          autoArm: true,
+          speechId: result.speech_id,
+          onAudioStart: () => {
+            setMessages([{ ...assistantMessage, content: "" }]);
+            startTextStream(0, result.reply);
+          },
+        });
       })
       .catch((err) => {
         // Backend unreachable / daily limit — leave the chat empty; the
@@ -174,6 +239,7 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
         lesson_id: lesson ? lesson.id : null,
         difficulty,
         mode,
+        language: lang === "ar" ? "ar" : "en",
         messages: nextMessages.map(({ role, content }) => ({ role, content })),
       });
       refreshUsage();
@@ -190,7 +256,6 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
       const replyIndex = nextMessages.length;
       const assistantMessage = { role: "assistant", content: result.reply, corrections };
       const finalMessages = [...nextMessages, assistantMessage];
-      setMessages(finalMessages);
 
       if (result.session_ending) {
         // The model detected the learner is wrapping up — let the farewell
@@ -198,12 +263,26 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
         // unmounting ChatView tears down the <audio> element and cuts the
         // reply off mid-sentence.
         setEndingSession(true);
-        await handleSpeak(replyIndex, result.reply, { autoArm: false });
+        await handleSpeak(replyIndex, result.reply, {
+          autoArm: false,
+          speechId: result.speech_id,
+          onAudioStart: () => {
+            setMessages([...nextMessages, { ...assistantMessage, content: "" }]);
+            startTextStream(replyIndex, result.reply);
+          },
+        });
         onEndSession(finalMessages, updatedMistakes);
         return;
       }
 
-      handleSpeak(replyIndex, result.reply, { autoArm: true });
+      handleSpeak(replyIndex, result.reply, {
+        autoArm: true,
+        speechId: result.speech_id,
+        onAudioStart: () => {
+          setMessages((prev) => [...prev, { ...assistantMessage, content: "" }]);
+          startTextStream(replyIndex, result.reply);
+        },
+      });
     } catch (err) {
       // Leave the user message on screen; the send just failed silently —
       // unless it's the daily message-limit 429, which rolls the optimistic
@@ -271,31 +350,35 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
       )}
 
       <div className="message-list" ref={listRef}>
-        {messages.map((msg, idx) => (
-          <div key={idx} className={`message-row ${msg.role}`}>
-            <div className={`bubble ${msg.role}`}>
-              {msg.content}
-              {msg.role === "assistant" && (
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  style={{ marginInlineStart: "0.4rem", fontSize: "0.85rem" }}
-                  onClick={() => handleSpeak(idx, msg.content, { autoArm: idx === messages.length - 1 })}
-                  disabled={speakingIndex === idx}
-                >
-                  {speakingIndex === idx ? "🔊..." : "🔊"}
-                </button>
-              )}
-              {msg.corrections && msg.corrections.length > 0 && (
-                <div className="corrections-inline">
-                  {msg.corrections.map((feedback, fIdx) => (
-                    <CorrectionCard key={fIdx} t={t} feedback={feedback} />
-                  ))}
-                </div>
-              )}
+        {messages.map((msg, idx) => {
+          const isStreaming = idx === streamingIndex;
+          const content = isStreaming ? streamingText : msg.content;
+          return (
+            <div key={idx} className={`message-row ${msg.role}`}>
+              <div className={`bubble ${msg.role}`}>
+                {content}
+                {msg.role === "assistant" && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ marginInlineStart: "0.4rem", fontSize: "0.85rem" }}
+                    onClick={() => handleSpeak(idx, msg.content, { autoArm: idx === messages.length - 1 })}
+                    disabled={speakingIndex === idx}
+                  >
+                    {speakingIndex === idx ? "..." : ""}
+                  </button>
+                )}
+                {!isStreaming && msg.corrections && msg.corrections.length > 0 && (
+                  <div className="corrections-inline">
+                    {msg.corrections.map((feedback, fIdx) => (
+                      <CorrectionCard key={fIdx} t={t} feedback={feedback} />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {endingSession && (
           <div className="message-row assistant">
             <span className="system-note">{t("session_ending_notice")}</span>

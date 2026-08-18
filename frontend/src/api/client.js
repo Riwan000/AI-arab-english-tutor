@@ -103,12 +103,18 @@ export const lessons = {
 };
 
 export const chat = {
-  start: ({ lesson_id, difficulty, mode }) =>
-    apiFetch("/api/v1/chat/start", { method: "POST", body: { lesson_id, difficulty, mode } }),
-  message: ({ lesson_id, difficulty, mode, messages }) =>
+  // language tells the backend which voice the frontend will ask for on the
+  // follow-up voice.speak call, so it can warm that reply's TTS audio while
+  // the LLM is still streaming it in (see ChatResponse.speech_id).
+  start: ({ lesson_id, difficulty, mode, language }) =>
+    apiFetch("/api/v1/chat/start", {
+      method: "POST",
+      body: { lesson_id, difficulty, mode, language },
+    }),
+  message: ({ lesson_id, difficulty, mode, language, messages }) =>
     apiFetch("/api/v1/chat/message", {
       method: "POST",
-      body: { lesson_id, difficulty, mode, messages },
+      body: { lesson_id, difficulty, mode, language, messages },
     }),
   getDraft: () => apiFetch("/api/v1/chat/draft"),
 };
@@ -121,10 +127,12 @@ export const voice = {
   },
   // Returns the raw Response (not a Blob): the caller streams response.body
   // into playback as chunks arrive instead of waiting for the full download.
-  speak: (text, language) =>
+  // speechId, when the chat response carried one, lets the backend skip
+  // resynthesizing audio it already started warming during LLM streaming.
+  speak: (text, language, speechId) =>
     apiFetch("/api/v1/voice/speak", {
       method: "POST",
-      body: { text, language },
+      body: { text, language, speech_id: speechId ?? null },
       raw: true,
     }),
 };

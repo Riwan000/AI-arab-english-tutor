@@ -47,8 +47,11 @@ function appendChunk(sourceBuffer, chunk) {
 // browser blocks/rejects play() (e.g. no user-gesture in the call stack),
 // resolves right away instead of waiting forever for an "ended" that will
 // never fire.
-async function playAndWaitForEnd(audioElement) {
+async function playAndWaitForEnd(audioElement, onStart) {
   const ended = waitForEvent(audioElement, "ended");
+  // Fire before awaiting play() so callers get exactly one "playback is
+  // starting" signal even if the browser blocks/rejects autoplay.
+  onStart?.();
   try {
     await audioElement.play();
   } catch (err) {
@@ -76,7 +79,7 @@ function attachMediaSource(audioElement, mediaSource) {
   }
 }
 
-async function streamIntoMediaSource(audioElement, response, signal) {
+async function streamIntoMediaSource(audioElement, response, signal, onStart) {
   const mediaSource = new MediaSource();
   const objectUrl = attachMediaSource(audioElement, mediaSource);
 
@@ -99,7 +102,7 @@ async function streamIntoMediaSource(audioElement, response, signal) {
       if (!playback) {
         // Start playback as soon as the first chunk lands — don't wait for
         // the rest of the stream to finish appending.
-        playback = playAndWaitForEnd(audioElement);
+        playback = playAndWaitForEnd(audioElement, onStart);
       }
     }
 
@@ -114,7 +117,7 @@ async function streamIntoMediaSource(audioElement, response, signal) {
   }
 }
 
-async function playBuffered(audioElement, response, signal) {
+async function playBuffered(audioElement, response, signal, onStart) {
   const blob = await response.blob();
   if (signal?.aborted) return;
 
@@ -122,7 +125,7 @@ async function playBuffered(audioElement, response, signal) {
   audioElement.src = url;
 
   try {
-    await playAndWaitForEnd(audioElement);
+    await playAndWaitForEnd(audioElement, onStart);
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -135,12 +138,14 @@ async function playBuffered(audioElement, response, signal) {
  *
  * @param {HTMLAudioElement} audioElement
  * @param {Response} response - a resolved fetch Response with a readable body
- * @param {{signal?: AbortSignal}} [opts]
+ * @param {{signal?: AbortSignal, onStart?: () => void}} [opts] - onStart fires
+ *   once playback is attempted (whether or not it actually starts), so
+ *   callers can sync other UI (e.g. revealing text) to when audio begins.
  */
-export async function playStreamedAudio(audioElement, response, { signal } = {}) {
+export async function playStreamedAudio(audioElement, response, { signal, onStart } = {}) {
   if (canStreamPlayback() && response.body) {
-    await streamIntoMediaSource(audioElement, response, signal);
+    await streamIntoMediaSource(audioElement, response, signal, onStart);
   } else {
-    await playBuffered(audioElement, response, signal);
+    await playBuffered(audioElement, response, signal, onStart);
   }
 }

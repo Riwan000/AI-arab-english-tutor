@@ -9,7 +9,7 @@ from services import openrouter
 
 
 def test_lesson_mode_resolves_lesson_and_calls_llm(monkeypatch):
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: "Hello!")
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter(["Hello!"]))
 
     response = conversation.start_conversation("present_simple")
 
@@ -21,7 +21,7 @@ def test_free_talk_mode_skips_lesson_lookup(monkeypatch):
         raise AssertionError("lessons.get_lesson should not be called in free_talk mode")
 
     monkeypatch.setattr(conversation.lessons, "get_lesson", fail_get_lesson)
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: "Hi there!")
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter(["Hi there!"]))
 
     response = conversation.start_conversation(None, mode="free_talk")
 
@@ -33,7 +33,7 @@ def test_send_message_free_talk_skips_lesson_lookup(monkeypatch):
         raise AssertionError("lessons.get_lesson should not be called in free_talk mode")
 
     monkeypatch.setattr(conversation.lessons, "get_lesson", fail_get_lesson)
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: "ok")
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter(["ok"]))
 
     response = conversation.send_message(None, [], "hi", mode="free_talk")
 
@@ -50,7 +50,7 @@ def test_start_conversation_passes_difficulty_and_mode_to_prompt_builder(monkeyp
         return [{"role": "system", "content": "x"}]
 
     monkeypatch.setattr(conversation, "build_messages", fake_build_messages)
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: "ok")
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter(["ok"]))
 
     conversation.start_conversation(None, difficulty="advanced", mode="free_talk")
 
@@ -68,7 +68,7 @@ def test_send_message_defaults_match_previous_lesson_mode_behavior(monkeypatch):
 
 
     monkeypatch.setattr(conversation, "build_messages", fake_build_messages)
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: "ok")
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter(["ok"]))
 
     conversation.send_message("present_simple", [], "hi")
 
@@ -177,7 +177,7 @@ def test_end_session_defaults_mode_to_lesson(monkeypatch):
 
 def test_send_message_threads_session_ending_true_from_llm(monkeypatch):
     raw = json.dumps({"reply": "Bye! See you next time.", "corrections": [], "session_ending": True})
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter([raw]))
 
     response = conversation.send_message(None, [], "goodbye", mode="free_talk")
 
@@ -186,7 +186,7 @@ def test_send_message_threads_session_ending_true_from_llm(monkeypatch):
 
 def test_send_message_threads_session_ending_false_from_llm(monkeypatch):
     raw = json.dumps({"reply": "Tell me more!", "corrections": [], "session_ending": False})
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter([raw]))
 
     response = conversation.send_message(None, [], "I like pizza", mode="free_talk")
 
@@ -195,7 +195,7 @@ def test_send_message_threads_session_ending_false_from_llm(monkeypatch):
 
 def test_send_message_defaults_session_ending_false_when_response_field_missing(monkeypatch):
     raw = json.dumps({"reply": "Tell me more!", "corrections": []})
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter([raw]))
 
     response = conversation.send_message(None, [], "I like pizza", mode="free_talk")
 
@@ -205,7 +205,7 @@ def test_send_message_defaults_session_ending_false_when_response_field_missing(
 def test_send_message_farewell_keyword_flags_session_ending_even_when_llm_omits_it(monkeypatch):
     """The LLM ignoring the field must not stop an obvious 'bye' from ending the chat."""
     raw = json.dumps({"reply": "Bye!", "corrections": []})
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter([raw]))
 
     response = conversation.send_message(None, [], "ok bye", mode="free_talk")
 
@@ -217,7 +217,7 @@ def test_send_message_farewell_keyword_flags_session_ending_even_when_llm_omits_
 
 def test_send_message_saves_a_draft_in_free_talk_when_not_ending(monkeypatch):
     raw = json.dumps({"reply": "Nice! Tell me more.", "corrections": [], "session_ending": False})
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter([raw]))
 
     captured = {}
 
@@ -238,7 +238,7 @@ def test_send_message_saves_a_draft_in_free_talk_when_not_ending(monkeypatch):
 
 def test_send_message_deletes_draft_when_session_ending(monkeypatch):
     raw = json.dumps({"reply": "Bye!", "corrections": [], "session_ending": True})
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter([raw]))
 
     captured = {}
     monkeypatch.setattr(DraftRepository, "delete", lambda self, user_id: captured.setdefault("deleted_for", user_id))
@@ -251,7 +251,7 @@ def test_send_message_deletes_draft_when_session_ending(monkeypatch):
 
 def test_send_message_skips_draft_persistence_without_user_id(monkeypatch):
     raw = json.dumps({"reply": "ok", "corrections": [], "session_ending": False})
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter([raw]))
     monkeypatch.setattr(DraftRepository, "save", lambda self, *a, **k: pytest.fail("should not save"))
     monkeypatch.setattr(DraftRepository, "delete", lambda self, *a, **k: pytest.fail("should not delete"))
 
@@ -260,7 +260,7 @@ def test_send_message_skips_draft_persistence_without_user_id(monkeypatch):
 
 def test_send_message_skips_draft_persistence_in_lesson_mode(monkeypatch):
     raw = json.dumps({"reply": "ok", "corrections": [], "session_ending": False})
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: raw)
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter([raw]))
     monkeypatch.setattr(DraftRepository, "save", lambda self, *a, **k: pytest.fail("should not save"))
     monkeypatch.setattr(DraftRepository, "delete", lambda self, *a, **k: pytest.fail("should not delete"))
 

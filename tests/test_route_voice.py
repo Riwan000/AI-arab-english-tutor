@@ -8,9 +8,17 @@ from fastapi.testclient import TestClient
 SECRET = "test-only-secret"
 os.environ.setdefault("JWT_SECRET_KEY", SECRET)
 
+from concurrent.futures import Future  # noqa: E402
+
 from api.main import app  # noqa: E402 (secret must be set before import)
-from services import voice  # noqa: E402
+from services import speech_cache, voice  # noqa: E402
 from services.errors import VoiceSynthesisError, VoiceTranscriptionError  # noqa: E402
+
+
+def _done_future(result):
+    future = Future()
+    future.set_result(result)
+    return future
 
 
 @pytest.fixture
@@ -255,3 +263,119 @@ def test_voice_calls_are_metered_independently_of_the_daily_message_limit(scoped
     assert second.status_code == 429
 
     get_settings.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# speech_id: reusing audio pre-warmed while the chat reply was still streaming
+# ---------------------------------------------------------------------------
+
+
+def test_speak_serves_cached_audio_when_speech_id_matches(scoped_client):
+    headers = _signup(scoped_client)
+    speech_id = speech_cache.create("en", _done_future([b"warmed-audio"]))
+
+    response = scoped_client.post(
+        "/api/v1/voice/speak",
+        headers=headers,
+        json={"text": "hello there", "language": "en", "speech_id": speech_id},
+    )
+
+    assert response.status_code == 200
+    # Cache hit: the warmed bytes, not the "fake-audio-bytes" fresh-synthesis
+    # stub the scoped_client fixture wires up for synthesize_speech_stream.
+    assert response.content == b"warmed-audio"
+
+
+def test_speak_falls_back_to_fresh_synthesis_for_an_unknown_speech_id(scoped_client):
+    headers = _signup(scoped_client)
+
+    response = scoped_client.post(
+        "/api/v1/voice/speak",
+        headers=headers,
+        json={"text": "hello there", "language": "en", "speech_id": "no-such-id"},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"fake-audio-bytes"
+
+
+def test_speak_falls_back_to_fresh_synthesis_on_a_language_mismatch(scoped_client):
+    headers = _signup(scoped_client)
+    speech_id = speech_cache.create("ar", _done_future([b"warmed-arabic-audio"]))
+
+    response = scoped_client.post(
+        "/api/v1/voice/speak",
+        headers=headers,
+        json={"text": "hello there", "language": "en", "speech_id": speech_id},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"fake-audio-bytes"
+
+
+def test_speak_combines_first_and_rest_futures_from_the_cache(scoped_client):
+    headers = _signup(scoped_client)
+    speech_id = speech_cache.create("en", _done_future([b"first-part-"]))
+    speech_cache.set_rest(speech_id, _done_future([b"second-part"]))
+
+    response = scoped_client.post(
+        "/api/v1/voice/speak",
+        headers=headers,
+        json={"text": "hello there", "language": "en", "speech_id": speech_id},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"first-part-second-part"
+
+
+def test_speak_falls_back_to_fresh_synthesis_when_the_warmed_audio_failed(scoped_client):
+    """A transient ElevenLabs failure during background warming must not be
+    baked in as a hard failure — /voice/speak should retry fresh, same as a
+    cache miss, instead of surfacing an error the caller had no way to avoid."""
+    headers = _signup(scoped_client)
+    failed_future = Future()
+    failed_future.set_exception(VoiceSynthesisError())
+    speech_id = speech_cache.create("en", failed_future)
+
+    response = scoped_client.post(
+        "/api/v1/voice/speak",
+        headers=headers,
+        json={"text": "hello there", "language": "en", "speech_id": speech_id},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"fake-audio-bytes"
+
+
+def test_speak_falls_back_when_the_warmed_future_raises_something_other_than_voice_synthesis_error(
+    scoped_client,
+):
+    """The cache is purely an optimization: whatever way its background
+    synthesis fails, /voice/speak must still recover by synthesizing fresh —
+    not just for the expected VoiceSynthesisError case."""
+    headers = _signup(scoped_client)
+    failed_future = Future()
+    failed_future.set_exception(RuntimeError("executor blew up"))
+    speech_id = speech_cache.create("en", failed_future)
+
+    response = scoped_client.post(
+        "/api/v1/voice/speak",
+        headers=headers,
+        json={"text": "hello there", "language": "en", "speech_id": speech_id},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"fake-audio-bytes"
+
+
+def test_speak_without_a_speech_id_uses_fresh_synthesis_as_before(scoped_client):
+    headers = _signup(scoped_client)
+
+    response = scoped_client.post(
+        "/api/v1/voice/speak",
+        headers=headers,
+        json={"text": "hello there", "language": "en"},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"fake-audio-bytes"

@@ -49,7 +49,7 @@ def test_start_conversation_free_talk_threads_user_id(monkeypatch):
         }
 
     monkeypatch.setattr(SessionRepository, "get_user_learning_profile", fake_profile)
-    monkeypatch.setattr("services.openrouter.chat_completion", lambda msgs: "Hello there!")
+    monkeypatch.setattr("services.openrouter.chat_completion_stream", lambda msgs: iter(["Hello there!"]))
 
     res = conversation.start_conversation(None, mode="free_talk", user_id=42)
 

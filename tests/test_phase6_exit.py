@@ -59,7 +59,7 @@ def _fail_get_lesson(lesson_id):
 
 def test_start_chat_free_talk_without_lesson_id_succeeds(scoped_client, monkeypatch):
     monkeypatch.setattr(conversation.lessons, "get_lesson", _fail_get_lesson)
-    monkeypatch.setattr(conversation.openrouter, "chat_completion", lambda messages: "Hi there!")
+    monkeypatch.setattr(conversation.openrouter, "chat_completion_stream", lambda messages: iter(["Hi there!"]))
     headers = _signup(scoped_client, "free-talk-start@example.com")
 
     response = scoped_client.post(
@@ -74,7 +74,7 @@ def test_start_chat_free_talk_without_lesson_id_succeeds(scoped_client, monkeypa
 
 def test_send_chat_message_free_talk_without_lesson_id_succeeds(scoped_client, monkeypatch):
     monkeypatch.setattr(conversation.lessons, "get_lesson", _fail_get_lesson)
-    monkeypatch.setattr(conversation.openrouter, "chat_completion", lambda messages: "Great job!")
+    monkeypatch.setattr(conversation.openrouter, "chat_completion_stream", lambda messages: iter(["Great job!"]))
     headers = _signup(scoped_client, "free-talk-message@example.com")
 
     response = scoped_client.post(
@@ -96,9 +96,9 @@ def test_start_chat_lesson_mode_still_resolves_lesson_by_default(scoped_client, 
 
     def fake_completion(messages):
         captured["messages"] = messages
-        return "Let's practice the present simple."
+        return iter(["Let's practice the present simple."])
 
-    monkeypatch.setattr(conversation.openrouter, "chat_completion", fake_completion)
+    monkeypatch.setattr(conversation.openrouter, "chat_completion_stream", fake_completion)
     headers = _signup(scoped_client, "lesson-start@example.com")
 
     response = scoped_client.post(
@@ -142,7 +142,7 @@ def test_free_talk_journey_from_start_to_saved_summary(scoped_client, monkeypatc
     monkeypatch.setattr(conversation.lessons, "get_lesson", _fail_get_lesson)
 
     def fake_completion(messages):
-        return (
+        return iter([
             "Great effort!\n"
             "```json\n"
             '{"corrections": [{"mistake_type": "verb_tense", '
@@ -150,9 +150,9 @@ def test_free_talk_journey_from_start_to_saved_summary(scoped_client, monkeypatc
             '"english_explanation": "Use past tense for a completed action.", '
             '"arabic_explanation": "Ø§Ø³ØªØ®Ø¯Ù… Ø§Ù„Ù…Ø§Ø¶ÙŠ Ù„Ù„ÙØ¹Ù„ Ø§Ù„Ù…ÙƒØªÙ…Ù„."}]}\n'
             "```"
-        )
+        ])
 
-    monkeypatch.setattr(conversation.openrouter, "chat_completion", fake_completion)
+    monkeypatch.setattr(conversation.openrouter, "chat_completion_stream", fake_completion)
     headers = _signup(scoped_client, "phase6-journey@example.com")
 
     # 1. picker: mode=free_talk, difficulty=advanced, no lesson.

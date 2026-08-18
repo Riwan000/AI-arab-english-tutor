@@ -1,7 +1,9 @@
 """ElevenLabs voice client: Scribe v2 STT and multilingual TTS."""
 
 import os
+import re
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 
 from elevenlabs.client import ElevenLabs
 
@@ -181,11 +183,66 @@ def synthesize_speech_stream(
     try:
         yield from client.text_to_speech.stream(
             voice_id=voice_id,
-            model_id="eleven_multilingual_v2",
+            model_id="eleven_flash_v2_5",
             text=text,
+            # 3 = max latency optimization while keeping the text normalizer
+            # on (level 4 turns normalization off, which risks mispronouncing
+            # numbers/dates — not an acceptable tradeoff for a tutor app).
+            optimize_streaming_latency=3,
         )
 
     except Exception as exc:
         raise VoiceSynthesisError(
             f"ElevenLabs synthesis error: {exc}"
         ) from exc
+
+
+def synthesize_speech_stream_to_list(text: str, language: str = "en") -> list[bytes]:
+    """Fully drain synthesize_speech_stream into a list. Exists so
+    services.conversation can hand this straight to a ThreadPoolExecutor as
+    a plain (fn, *args) submission — a background thread needs a concrete
+    result to store on its Future, not a lazy generator that would otherwise
+    still be doing its (blocking) ElevenLabs I/O on demand later, off-thread."""
+    return list(synthesize_speech_stream(text, language))
+
+
+# Public so services.conversation can apply the identical boundary rule to
+# text streaming in from the LLM — using the same regex is what guarantees
+# the sentence synthesized early during streaming matches the first sentence
+# _split_first_sentence would find in the final, complete reply text.
+SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?؟])\s+(?=\S)")
+
+
+def split_first_sentence(text: str) -> tuple[str, str] | None:
+    """Split off the first sentence, or None if there's no detectable
+    boundary (single sentence, no terminal punctuation, etc.). Public so
+    services.conversation can compute the identical "rest of the reply" text
+    its early speech-warming path uses, keeping exactly one source of truth
+    for where a reply gets split for TTS."""
+    parts = [part for part in SENTENCE_BOUNDARY.split(text) if part.strip()]
+    if len(parts) <= 1:
+        return None
+    return parts[0], " ".join(parts[1:])
+
+
+def synthesize_speech_stream_pipelined(
+    text: str,
+    language: str = "en",
+) -> Iterator[bytes]:
+    """Like synthesize_speech_stream, but starts streaming the first
+    sentence's audio while synthesizing the rest of the reply concurrently
+    in the background, so playback can start sooner without needing a
+    second /speak request (and a second voice-quota charge) to do it."""
+
+    split = split_first_sentence(text)
+    if split is None:
+        yield from synthesize_speech_stream(text, language)
+        return
+
+    first, rest = split
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        rest_future = executor.submit(lambda: list(synthesize_speech_stream(rest, language)))
+
+        yield from synthesize_speech_stream(first, language)
+        yield from rest_future.result()

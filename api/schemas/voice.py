@@ -17,6 +17,12 @@ class TranscribeResponse(BaseModel):
 class SpeakRequest(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_SPEAK_TEXT_LENGTH)
     language: Literal["en", "ar"] = "en"
+    # Echoes ChatResponse.speech_id when the caller has one, so this call can
+    # reuse audio that started synthesizing while the reply was still
+    # streaming in rather than synthesizing `text` again from scratch. Purely
+    # an optimization hint — omitted, unrecognized, or expired IDs just fall
+    # back to synthesizing `text` directly.
+    speech_id: str | None = None
 
 class TranscriptionResult(TypedDict):
     text: str

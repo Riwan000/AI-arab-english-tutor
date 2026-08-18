@@ -35,6 +35,15 @@ class ChatResponse(BaseModel):
             "that the user wants to end the conversation."
         ),
     )
+    speech_id: str | None = Field(
+        default=None,
+        description=(
+            "When set, hand this back on the following POST /voice/speak call "
+            "(same field name) to reuse audio that started synthesizing while "
+            "this reply was still streaming in, instead of synthesizing it "
+            "again from scratch."
+        ),
+    )
 
 
 class SessionSummary(BaseModel):

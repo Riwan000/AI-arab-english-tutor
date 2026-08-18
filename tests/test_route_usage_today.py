@@ -17,7 +17,7 @@ def scoped_client(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", SECRET)
     monkeypatch.setenv("DAILY_MESSAGE_LIMIT", "5")
     monkeypatch.setenv("DAILY_VOICE_CALL_LIMIT", "3")
-    monkeypatch.setattr(openrouter, "chat_completion", lambda messages: "ok")
+    monkeypatch.setattr(openrouter, "chat_completion_stream", lambda messages: iter(["ok"]))
 
     from api.config import get_settings
 
