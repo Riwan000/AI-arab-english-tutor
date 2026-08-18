@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { ApiError, voice } from "../api/client";
+import VoiceOrb from "./VoiceOrb.jsx";
 
 const MIC_ERROR_DISPLAY_MS = 4000;
 
@@ -10,7 +11,10 @@ const SILENCE_THRESHOLD = 0.02;
 const INITIAL_SILENCE_MS = 4000;
 const POST_SPEECH_SILENCE_MS = 1800;
 
-const MicButton = forwardRef(function MicButton({ t, onTranscribed, disabled }, ref) {
+const MicButton = forwardRef(function MicButton(
+  { t, onTranscribed, disabled, size = "hero", onRecordingChange },
+  ref
+) {
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const [micError, setMicError] = useState(null);
@@ -112,6 +116,7 @@ const MicButton = forwardRef(function MicButton({ t, onTranscribed, disabled }, 
 
       recorder.start();
       setRecording(true);
+      onRecordingChange?.(true);
       watchForSilence(stream, stopRecording);
     } catch {
       showError(t("mic_permission_error"));
@@ -128,6 +133,7 @@ const MicButton = forwardRef(function MicButton({ t, onTranscribed, disabled }, 
       streamRef.current = null;
     }
     setRecording(false);
+    onRecordingChange?.(false);
   }
 
   async function handleRecordingStop() {
@@ -159,22 +165,19 @@ const MicButton = forwardRef(function MicButton({ t, onTranscribed, disabled }, 
   }
 
   return (
-    <div className="mic-wrap">
+    <div className={`mic-wrap ${size === "hero" ? "hero" : ""}`}>
       {micError && (
         <span className="mic-error" role="alert">
           {micError}
         </span>
       )}
-      <button
-        type="button"
-        className={`mic-btn ${recording ? "recording" : ""}`}
-        onClick={handleClick}
+      <VoiceOrb
+        size={size}
+        active={recording}
         disabled={disabled || busy}
-        title={recording ? t("listening_label") : t("voice_input_label")}
-        aria-label={recording ? t("listening_label") : t("voice_input_label")}
-      >
-        {recording ? "⏹" : "🎙️"}
-      </button>
+        onClick={handleClick}
+        label={recording ? t("listening_label") : t("voice_input_label")}
+      />
     </div>
   );
 });

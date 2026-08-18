@@ -10,6 +10,9 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState(null);
+  const [voiceMode, setVoiceMode] = useState("orb");
+  const [displayHero, setDisplayHero] = useState(true);
+  const [swapping, setSwapping] = useState(false);
   const [limitReached, setLimitReached] = useState(false);
   const [usageToday, setUsageToday] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -19,6 +22,24 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
   const micRef = useRef(null);
   const startedRef = useRef(false);
   const speechAbortRef = useRef(null);
+  const swapTimerRef = useRef(null);
+
+  // AI speech always reclaims the hero orb, even if the learner had switched to typing.
+  const showHero = voiceMode === "orb" || speakingIndex !== null;
+
+  // Delays the composer's layout swap so the outgoing control (keyboard
+  // toggle or textbox) gets time to play its pop-out transition instead of
+  // vanishing the instant the target mode changes.
+  useEffect(() => {
+    if (showHero === displayHero) return;
+    setSwapping(true);
+    clearTimeout(swapTimerRef.current);
+    swapTimerRef.current = setTimeout(() => {
+      setDisplayHero(showHero);
+      setSwapping(false);
+    }, 200);
+    return () => clearTimeout(swapTimerRef.current);
+  }, [showHero, displayHero]);
 
   function isMessageLimitError(err) {
     return err instanceof ApiError && err.status === 429 && err.detail?.kind !== "voice";
@@ -51,9 +72,10 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
     speechAbortRef.current = controller;
 
     try {
-      const response = await voice.speak(text, lang === "ar" ? "ar" : "en");
       if (audioRef.current) {
-        await playStreamedAudio(audioRef.current, response, { signal: controller.signal });
+        await speakPipelined(audioRef.current, text, lang === "ar" ? "ar" : "en", {
+          signal: controller.signal,
+        });
       }
     } catch (err) {
       console.warn("Speech synthesis error:", err);
@@ -207,6 +229,13 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
     onEndSession(messages, mistakes);
   }
 
+  function handleKeyboardToggle() {
+    if (micRef.current && micRef.current.isRecording()) {
+      micRef.current.stopRecording();
+    }
+    setVoiceMode("text");
+  }
+
   const title = lesson
     ? t("training_header_lesson", { title: lesson.title })
     : t("training_header_free_talk");
@@ -275,28 +304,45 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
 
       <audio ref={audioRef} hidden />
 
-      <form className="composer" onSubmit={handleSubmit}>
+      <div className={`composer ${displayHero ? "hero" : ""}`}>
         <MicButton
           ref={micRef}
           t={t}
+          size={showHero ? "hero" : "compact"}
           disabled={sending || limitReached || endingSession}
           onTranscribed={(text) => sendText(text)}
+          onRecordingChange={(isRecording) => setVoiceMode(isRecording ? "orb" : "text")}
         />
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={limitReached ? t("daily_limit_placeholder") : t("chat_input_placeholder")}
-          disabled={sending || limitReached || endingSession}
-        />
-        <button
-          type="submit"
-          className="send-btn"
-          disabled={sending || limitReached || endingSession || !input.trim()}
-        >
-          ➤
-        </button>
-      </form>
+        {displayHero ? (
+          <button
+            type="button"
+            className={`kb-toggle ${swapping ? "closing" : ""}`}
+            onClick={handleKeyboardToggle}
+          >
+            {t("type_instead_label")}
+          </button>
+        ) : (
+          <form
+            className={`composer-text-row ${swapping ? "closing" : ""}`}
+            onSubmit={handleSubmit}
+          >
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={limitReached ? t("daily_limit_placeholder") : t("chat_input_placeholder")}
+              disabled={sending || limitReached || endingSession}
+            />
+            <button
+              type="submit"
+              className="send-btn"
+              disabled={sending || limitReached || endingSession || !input.trim()}
+            >
+              ➤
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }
