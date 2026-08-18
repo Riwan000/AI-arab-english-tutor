@@ -24,8 +24,9 @@ export default function ChatView({ lang, t, lesson, mode, difficulty, onEndSessi
   const speechAbortRef = useRef(null);
   const swapTimerRef = useRef(null);
 
-  // AI speech always reclaims the hero orb, even if the learner had switched to typing.
-  const showHero = voiceMode === "orb" || speakingIndex !== null;
+  // The hero orb stays shrunk while the AI is speaking and only grows back
+  // once playback ends and it's the learner's turn to talk.
+  const showHero = voiceMode === "orb" && speakingIndex === null;
 
   // Delays the composer's layout swap so the outgoing control (keyboard
   // toggle or textbox) gets time to play its pop-out transition instead of
