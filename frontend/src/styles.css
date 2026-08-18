@@ -548,8 +548,8 @@ textarea {
 }
 
 .mic-wrap.hero {
-  width: 200px;
-  height: 200px;
+  width: 152px;
+  height: 152px;
 }
 
 .mic-error {
@@ -573,8 +573,8 @@ textarea {
   top: 50%;
   left: 50%;
   translate: -50% -50%;
-  width: 200px;
-  height: 200px;
+  width: 152px;
+  height: 152px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -585,7 +585,7 @@ textarea {
   background: none;
   rotate: 90deg;
   cursor: pointer;
-  filter: drop-shadow(0 0 6px #ff3e1c88) drop-shadow(0 0 6px #1c8cff88);
+  filter: drop-shadow(0 0 6px var(--color-primary)) drop-shadow(0 0 6px var(--color-amber));
   transition: all 0.3s ease;
 }
 
@@ -596,16 +596,16 @@ textarea {
 
 .orb {
   position: absolute;
-  width: 200px;
+  width: 152px;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: #060606;
+  background: #9a3412;
   filter: blur(24px);
   transition: all 0.3s ease;
 }
 
 .orb-container.orb-active .orb {
-  width: 220px;
+  width: 168px;
   animation: rotate 6s infinite;
 }
 
@@ -616,7 +616,7 @@ textarea {
   width: 160%;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: #ff3e1c;
+  background: var(--color-primary);
   clip-path: polygon(
     50% 0%,
     61% 35%,
@@ -638,7 +638,7 @@ textarea {
   right: -120%;
   top: auto;
   bottom: -25%;
-  background: #1c8cff;
+  background: var(--color-amber);
   animation-duration: 8s;
   clip-path: polygon(
     20% 0%,
@@ -673,7 +673,7 @@ textarea {
    value above (blur, shadow, blob geometry) proportional to the original,
    and transitions smoothly since only `scale` changes, never `position` */
 .orb-container.orb-compact {
-  scale: 0.22;
+  scale: 0.29;
 }
 
 /* ---- summary view ---- */
