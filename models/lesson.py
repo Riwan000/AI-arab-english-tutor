@@ -23,6 +23,8 @@ class Lesson(BaseModel):
     negative_form: list[str] = Field(default_factory=list)
     question_form: list[str] = Field(default_factory=list)
     tips: list[str] = Field(default_factory=list)
+    techniques: list[str] = Field(default_factory=list)
+    question_types: list[str] = Field(default_factory=list)
 
     def to_summary(self) -> LessonSummary:
         return LessonSummary(id=self.id, title=self.title, description=self.description)
